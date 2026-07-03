@@ -20,17 +20,20 @@ IMAGE_XZ="${IMAGE_NAME}.xz"
 IMAGE_SHA="${IMAGE_XZ}.sha256"
 BASE_URL="https://firmware.turingpi.com/turing-rk1/ubuntu_22.04_rockchip_linux/${IMAGE_VERSION}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-IMAGE_PATH="${SCRIPT_DIR}/images/${IMAGE_NAME}"
+IMAGE_DIR="${SCRIPT_DIR}/images"
+IMAGE_PATH="${IMAGE_DIR}/${IMAGE_NAME}"
 
 # Confirmed: RK1 modules are in slots 1, 3, 4. Slot 2 is Orin NX — never flash here.
 RK1_NODES=(1 3 4)
 
-SKIP_DOWNLOAD=false; SINGLE_NODE=""
+SKIP_DOWNLOAD=false
+SINGLE_NODE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --skip-download) SKIP_DOWNLOAD=true ;;
     --node) SINGLE_NODE="$2"; shift ;;
-  esac; shift
+  esac
+  shift
 done
 [[ -n "$SINGLE_NODE" ]] && RK1_NODES=("$SINGLE_NODE")
 
@@ -47,27 +50,46 @@ for cmd in tpi wget sha256sum xz; do
   command -v "$cmd" &>/dev/null || { echo "ERROR: $cmd not found. Run: make setup"; exit 1; }
 done
 
-# ── BMC check ─────────────────────────────────────────────────────────────────
+# ── BMC connectivity check ────────────────────────────────────────────────────
 echo "→ Checking BMC..."
 $TPI power status || { echo "ERROR: Cannot reach BMC at ${BMC_IP}"; exit 1; }
 echo "  ✓ BMC reachable"
 
-# ── Download ──────────────────────────────────────────────────────────────────
-mkdir -p "${SCRIPT_DIR}/images"
+# ── Download and verify image ─────────────────────────────────────────────────
+mkdir -p "$IMAGE_DIR"
 
-if [[ "$SKIP_DOWNLOAD" == false && ! -f "$IMAGE_PATH" ]]; then
-  echo "→ Downloading Ubuntu 22.04 RK1 image (719MB)..."
-  wget --progress=bar:force:noscroll \
-    -O "${SCRIPT_DIR}/images/${IMAGE_XZ}" "${BASE_URL}/${IMAGE_XZ}"
-  wget -q -O "${SCRIPT_DIR}/images/${IMAGE_SHA}" "${BASE_URL}/${IMAGE_SHA}"
+if [[ "$SKIP_DOWNLOAD" == true && -f "$IMAGE_PATH" ]]; then
+  echo "→ Using existing image: $IMAGE_PATH"
+elif [[ -f "$IMAGE_PATH" ]]; then
+  echo "→ Image already decompressed, skipping download: $IMAGE_PATH"
+else
+  if [[ ! -f "${IMAGE_DIR}/${IMAGE_XZ}" ]]; then
+    echo "→ Downloading Ubuntu 22.04 RK1 image (719MB)..."
+    wget --progress=bar:force:noscroll \
+      -O "${IMAGE_DIR}/${IMAGE_XZ}" \
+      "${BASE_URL}/${IMAGE_XZ}"
+
+    echo "→ Downloading checksum..."
+    wget -q -O "${IMAGE_DIR}/${IMAGE_SHA}" "${BASE_URL}/${IMAGE_SHA}"
+  fi
 
   echo "→ Verifying checksum..."
-  cd "${SCRIPT_DIR}/images"
-  sha256sum -c "$IMAGE_SHA" && echo "  ✓ Checksum OK" || { echo "  ✗ Checksum FAILED"; exit 1; }
+  EXPECTED_HASH=$(awk '{print $1}' "${IMAGE_DIR}/${IMAGE_SHA}")
+  ACTUAL_HASH=$(sha256sum "${IMAGE_DIR}/${IMAGE_XZ}" | awk '{print $1}')
+  if [[ "$EXPECTED_HASH" == "$ACTUAL_HASH" ]]; then
+    echo "  ✓ Checksum OK"
+  else
+    echo "  ✗ Checksum FAILED"
+    echo "    expected: $EXPECTED_HASH"
+    echo "    actual:   $ACTUAL_HASH"
+    echo "  Deleting corrupt file — re-run to download again"
+    rm -f "${IMAGE_DIR}/${IMAGE_XZ}"
+    exit 1
+  fi
 
-  echo "→ Decompressing (~2 minutes)..."
-  xz --decompress --keep "${SCRIPT_DIR}/images/${IMAGE_XZ}"
-  echo "  ✓ Ready: ${IMAGE_PATH}"
+  echo "→ Decompressing image (~2 minutes)..."
+  xz --decompress --keep "${IMAGE_DIR}/${IMAGE_XZ}"
+  echo "  ✓ Decompressed: ${IMAGE_PATH}"
 fi
 
 [[ ! -f "$IMAGE_PATH" ]] && { echo "ERROR: Image not found: ${IMAGE_PATH}"; exit 1; }
@@ -77,7 +99,8 @@ for node in "${RK1_NODES[@]}"; do
   echo ""
   echo "━━━ Flashing Node ${node} ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo "→ Powering off node ${node}..."
-  $TPI power off --node "$node"; sleep 3
+  $TPI power off --node "$node"
+  sleep 3
 
   echo "→ Flashing Ubuntu 22.04 (~5-10 minutes)..."
   $TPI flash --node "$node" --image-path "$IMAGE_PATH"
@@ -86,7 +109,7 @@ for node in "${RK1_NODES[@]}"; do
   $TPI power on --node "$node"
   echo "  ✓ Node ${node} flash complete"
 
-  [[ "${node}" != "${RK1_NODES[-1]}" ]] && { echo "→ Pausing 15s..."; sleep 15; }
+  [[ "${node}" != "${RK1_NODES[-1]}" ]] && { echo "→ Pausing 15s before next node..."; sleep 15; }
 done
 
 echo ""

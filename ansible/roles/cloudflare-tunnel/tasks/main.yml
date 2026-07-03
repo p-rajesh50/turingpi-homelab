@@ -1,0 +1,155 @@
+---
+# ansible/roles/cloudflare-tunnel/tasks/main.yml
+# Deploys Cloudflare Tunnel (cloudflared) as a K8s Deployment.
+# Creates DNS records automatically for all exposed services.
+# No ports need to be opened on your home router.
+#
+# Exposes these services at kloud-worx.com:
+#   vault.kloud-worx.com      → HashiCorp Vault UI
+#   grafana.kloud-worx.com    → Grafana monitoring
+#   jupyter.kloud-worx.com    → JupyterHub
+#   gitea.kloud-worx.com      → Gitea self-hosted Git
+#   llm.kloud-worx.com        → Open WebUI (chat with local models)
+#   litellm.kloud-worx.com    → LiteLLM API gateway
+#   minio.kloud-worx.com      → MinIO S3 console
+#
+# PREREQUISITE: Cloudflare tunnel token stored in Vault:
+#   vault kv put secret/cloudflare \
+#     TUNNEL_TOKEN="..." \
+#     API_TOKEN="..." \
+#     ZONE_ID="..." \
+#     ACCOUNT_ID="..."
+
+- name: Create cloudflare-tunnel namespace
+  ansible.builtin.command: >
+    kubectl create namespace cloudflare-tunnel --dry-run=client -o yaml | kubectl apply -f -
+  changed_when: true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Deploy cloudflared tunnel config
+  ansible.builtin.copy:
+    dest: /tmp/cloudflared.yml
+    mode: "0644"
+    content: |
+      ---
+      # ConfigMap with tunnel routing rules
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: cloudflared-config
+        namespace: cloudflare-tunnel
+      data:
+        config.yaml: |
+          tunnel: homelab
+          credentials-file: /etc/cloudflared/creds/credentials.json
+          metrics: 0.0.0.0:2000
+          no-autoupdate: true
+
+          ingress:
+            # Vault secrets management UI
+            - hostname: vault.kloud-worx.com
+              service: http://vault.vault.svc.cluster.local:8200
+
+            # Grafana monitoring
+            - hostname: grafana.kloud-worx.com
+              service: http://monitoring-grafana.monitoring.svc.cluster.local:80
+
+            # JupyterHub notebooks
+            - hostname: jupyter.kloud-worx.com
+              service: http://proxy-public.jupyterhub.svc.cluster.local:80
+
+            # Gitea self-hosted Git
+            - hostname: gitea.kloud-worx.com
+              service: http://gitea-http.gitea.svc.cluster.local:3000
+
+            # Open WebUI — chat with local LLMs remotely
+            - hostname: llm.kloud-worx.com
+              service: http://{{ node_ips.orin_nx }}:{{ open_webui_port }}
+
+            # LiteLLM AI Gateway API
+            - hostname: litellm.kloud-worx.com
+              service: http://litellm.litellm.svc.cluster.local:80
+
+            # MinIO S3 Console
+            - hostname: minio.kloud-worx.com
+              service: http://minio.minio.svc.cluster.local:9001
+
+            # Prefect orchestration UI
+            - hostname: prefect.kloud-worx.com
+              service: http://prefect-server.prefect.svc.cluster.local:4200
+
+            # Catch-all
+            - service: http_status:404
+
+      ---
+      # Deployment — runs 2 replicas for reliability
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: cloudflared
+        namespace: cloudflare-tunnel
+      spec:
+        replicas: 2
+        selector:
+          matchLabels:
+            app: cloudflared
+        template:
+          metadata:
+            labels:
+              app: cloudflared
+          spec:
+            containers:
+              - name: cloudflared
+                image: cloudflare/cloudflared:latest
+                args:
+                  - tunnel
+                  - --config
+                  - /etc/cloudflared/config/config.yaml
+                  - run
+                env:
+                  - name: TUNNEL_TOKEN
+                    valueFrom:
+                      secretKeyRef:
+                        name: cloudflare-secrets
+                        key: TUNNEL_TOKEN
+                volumeMounts:
+                  - name: config
+                    mountPath: /etc/cloudflared/config
+                    readOnly: true
+                resources:
+                  requests:
+                    memory: 64Mi
+                    cpu: 50m
+                  limits:
+                    memory: 128Mi
+                    cpu: 200m
+                livenessProbe:
+                  httpGet:
+                    path: /ready
+                    port: 2000
+                  initialDelaySeconds: 10
+            volumes:
+              - name: config
+                configMap:
+                  name: cloudflared-config
+
+- name: Apply cloudflared deployment
+  ansible.builtin.command: kubectl apply -f /tmp/cloudflared.yml
+  changed_when: true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Print Cloudflare Tunnel summary
+  ansible.builtin.debug:
+    msg:
+      - "Cloudflare Tunnel deployed — services now accessible at:"
+      - "  https://vault.kloud-worx.com      ← Vault UI"
+      - "  https://grafana.kloud-worx.com    ← Grafana"
+      - "  https://jupyter.kloud-worx.com    ← JupyterHub"
+      - "  https://gitea.kloud-worx.com      ← Gitea"
+      - "  https://llm.kloud-worx.com        ← Open WebUI"
+      - "  https://litellm.kloud-worx.com    ← LiteLLM API"
+      - "  https://minio.kloud-worx.com      ← MinIO Console"
+      - "  https://prefect.kloud-worx.com    ← Prefect UI"
+      - "All protected by Cloudflare Access (Google OAuth login required)"

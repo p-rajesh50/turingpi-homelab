@@ -239,3 +239,45 @@ save:
 .PHONY: sync
 sync:
 	@git pull --rebase && echo "✓ Synced"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SECRETS & VAULT
+# ─────────────────────────────────────────────────────────────────────────────
+.PHONY: vault
+vault:
+	ansible-playbook ansible/playbooks/09-vault.yml \
+		-i $(INVENTORY) $(ANSIBLE_ARGS)
+
+.PHONY: vault-unseal
+vault-unseal:
+	@VAULT_KEYS=$$(python3 -c "import json; d=json.load(open('$(HOME)/.vault-init.json')); [print(k) for k in d['unseal_keys_b64'][:3]]"); \
+	for key in $$VAULT_KEYS; do \
+		kubectl exec vault-0 -n vault -- vault operator unseal $$key; \
+	done
+	@echo "✓ Vault unsealed"
+
+.PHONY: vault-status
+vault-status:
+	@kubectl exec vault-0 -n vault -- vault status 2>/dev/null || echo "Vault not running"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# REMOTE ACCESS
+# ─────────────────────────────────────────────────────────────────────────────
+.PHONY: tailscale
+tailscale:
+	@source "$(HOME)/.turingpi" && \
+	ansible-playbook ansible/playbooks/10-tailscale.yml \
+		-i $(INVENTORY) \
+		-e "tailscale_auth_key=$$TAILSCALE_AUTH_KEY" \
+		$(ANSIBLE_ARGS)
+
+.PHONY: cloudflare
+cloudflare:
+	ansible-playbook ansible/playbooks/11-cloudflare-tunnel.yml \
+		-i $(INVENTORY) $(ANSIBLE_ARGS)
+
+.PHONY: remote-access
+remote-access: tailscale cloudflare
+	@echo "✓ Remote access configured"
+	@echo "  Tailscale: install app on your devices and log in"
+	@echo "  Web UIs:   https://*.kloud-worx.com"

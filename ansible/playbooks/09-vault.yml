@@ -1,0 +1,13 @@
+---
+# ansible/playbooks/09-vault.yml
+# Deploys HashiCorp Vault + External Secrets Operator
+# Run this BEFORE make secrets and make ai-stack
+
+- name: Deploy Vault and External Secrets Operator
+  hosts: k8s_control
+  become: false
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  roles:
+    - role: vault
+    - role: external-secrets

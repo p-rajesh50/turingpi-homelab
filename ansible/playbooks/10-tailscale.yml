@@ -1,0 +1,37 @@
+---
+# ansible/playbooks/10-tailscale.yml
+# Installs Tailscale on all cluster nodes and Jetson devices.
+# Run after make kubernetes so nodes have their static IPs.
+
+- name: Install Tailscale on all nodes
+  hosts: rk1_nodes:jetson_nodes
+  become: true
+  vars:
+    # Fetched from Vault by setup-api-keys.sh — do not hardcode here
+    tailscale_auth_key: "{{ lookup('env', 'TAILSCALE_AUTH_KEY') }}"
+  roles:
+    - role: tailscale
+
+- name: Print remote access summary
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Remote access instructions
+      ansible.builtin.debug:
+        msg:
+          - "Tailscale installed on all nodes."
+          - "Install Tailscale on your devices:"
+          - "  Windows: https://tailscale.com/download/windows"
+          - "  macOS:   https://tailscale.com/download/mac"
+          - "  iOS:     https://tailscale.com/download/ios"
+          - "  Android: https://tailscale.com/download/android"
+          - ""
+          - "After installing, log in with the same Tailscale account."
+          - "Enable subnet routes in Tailscale admin console:"
+          - "  https://login.tailscale.com/admin/machines"
+          - "  Find rk1-control → Edit route settings → Approve 10.0.0.0/24"
+          - ""
+          - "Then from anywhere in the world:"
+          - "  ssh ubuntu@10.0.0.11    (rk1-control via subnet route)"
+          - "  kubectl get nodes       (works via Tailscale)"
+          - "  make health             (works via Tailscale)"

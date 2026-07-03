@@ -48,7 +48,7 @@ echo ""; echo "━━━ Step 2: Installing tpi v${TPI_VERSION} ━━━━━�
 if command -v tpi &>/dev/null && tpi --version 2>/dev/null | grep -q "$TPI_VERSION"; then
   success "tpi ${TPI_VERSION} already installed"
 else
-  TPI_URL="https://github.com/turing-machines/tpi/releases/download/${TPI_VERSION}/tpi-x86_64-unknown-linux-gnu.tar.gz"
+  TPI_URL="https://github.com/turing-machines/tpi/releases/download/${TPI_VERSION}/tpi-x86_64-unknown-linux-musl.tar.gz"
   info "Downloading tpi from GitHub..."
   wget -q --show-progress -O /tmp/tpi.tar.gz "$TPI_URL"
   tar -xzf /tmp/tpi.tar.gz -C ~ ./usr/bin/tpi
@@ -60,7 +60,11 @@ fi
 
 # ── Step 3: Ansible Galaxy collections ───────────────────────────────────────
 echo ""; echo "━━━ Step 3: Ansible Galaxy collections ━━━━━━━━━━━━━━━━━━━"
-ansible-galaxy collection install ansible.posix community.general community.docker kubernetes.core
+ansible-galaxy collection install \
+  ansible.posix \
+  community.general \
+  community.docker \
+  kubernetes.core
 success "Ansible collections installed"
 
 # ── Step 4: BMC credentials ───────────────────────────────────────────────────

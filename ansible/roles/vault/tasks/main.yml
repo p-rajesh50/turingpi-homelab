@@ -1,0 +1,239 @@
+---
+# ansible/roles/vault/tasks/main.yml
+# Deploys HashiCorp Vault on Kubernetes
+# - Backed by Longhorn PVC for encrypted persistent storage
+# - Auto-initialized and unsealed via Kubernetes secrets
+# - Exposed via Cloudflare Tunnel at vault.kloud-worx.com
+# - Kubernetes auth method enabled so pods can authenticate natively
+
+- name: Add HashiCorp Helm repo
+  ansible.builtin.command: helm repo add hashicorp https://helm.releases.hashicorp.com
+  changed_when: true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Update Helm repos
+  ansible.builtin.command: helm repo update
+  changed_when: true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Create vault namespace
+  ansible.builtin.command: >
+    kubectl create namespace vault --dry-run=client -o yaml | kubectl apply -f -
+  changed_when: true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Deploy Vault via Helm
+  ansible.builtin.command: >
+    helm upgrade --install vault hashicorp/vault
+    --namespace vault
+    --values /tmp/vault-values.yml
+    --wait --timeout 10m
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: true
+
+- name: Write Vault Helm values
+  ansible.builtin.copy:
+    dest: /tmp/vault-values.yml
+    mode: "0644"
+    content: |
+      server:
+        # Run in standalone mode (single replica) — sufficient for homelab
+        standalone:
+          enabled: true
+          config: |
+            ui = true
+
+            listener "tcp" {
+              tls_disable = 1
+              address     = "[::]:8200"
+              cluster_address = "[::]:8201"
+            }
+
+            storage "file" {
+              path = "/vault/data"
+            }
+
+            # Allow Kubernetes pods to authenticate with Vault
+            # using their service account tokens
+            api_addr = "http://vault.vault.svc.cluster.local:8200"
+
+        # Persist Vault data on Longhorn NVMe storage
+        dataStorage:
+          enabled: true
+          size: 10Gi
+          storageClass: longhorn
+
+        # Resource limits tuned for RK1 ARM64 nodes
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: 250m
+          limits:
+            memory: 512Mi
+            cpu: 500m
+
+        # Expose Vault within the cluster
+        service:
+          enabled: true
+          type: ClusterIP
+          port: 8200
+
+      # Vault UI is exposed via Cloudflare Tunnel — not directly
+      ui:
+        enabled: true
+        serviceType: ClusterIP
+
+      # Injector injects Vault secrets into pods as files
+      # Useful for apps that read secrets from filesystem
+      injector:
+        enabled: true
+        resources:
+          requests:
+            memory: 64Mi
+            cpu: 50m
+          limits:
+            memory: 128Mi
+
+- name: Wait for Vault pod to be ready
+  ansible.builtin.command: >
+    kubectl wait pod/vault-0
+    --for=condition=Ready
+    --namespace vault
+    --timeout=300s
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: false
+
+- name: Check if Vault is already initialized
+  ansible.builtin.command: >
+    kubectl exec vault-0 -n vault -- vault status -format=json
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: vault_status
+  changed_when: false
+  failed_when: false
+
+- name: Initialize Vault (first time only)
+  ansible.builtin.command: >
+    kubectl exec vault-0 -n vault --
+    vault operator init
+    -key-shares=5
+    -key-threshold=3
+    -format=json
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  register: vault_init
+  when: "'Initialized' not in vault_status.stdout or 'false' in vault_status.stdout"
+  changed_when: true
+
+- name: Save Vault unseal keys and root token
+  ansible.builtin.copy:
+    dest: "{{ ansible_env.HOME }}/.vault-init.json"
+    content: "{{ vault_init.stdout }}"
+    mode: "0600"
+  when: vault_init is changed
+  delegate_to: localhost
+  become: false
+
+- name: Print Vault init instructions
+  ansible.builtin.debug:
+    msg:
+      - "╔══════════════════════════════════════════════════════════╗"
+      - "║  IMPORTANT: Vault Unseal Keys Saved                      ║"
+      - "╚══════════════════════════════════════════════════════════╝"
+      - "Unseal keys and root token saved to: ~/.vault-init.json"
+      - "BACK THIS FILE UP IMMEDIATELY to a secure location."
+      - "Without the unseal keys, Vault data is permanently lost."
+      - "Run 'make vault-unseal' to unseal Vault after every restart."
+  when: vault_init is changed
+
+- name: Unseal Vault using saved keys
+  ansible.builtin.shell: |
+    KEYS=$(cat {{ ansible_env.HOME }}/.vault-init.json | python3 -c "
+    import sys, json
+    data = json.load(sys.stdin)
+    keys = data['unseal_keys_b64']
+    print('\n'.join(keys[:3]))
+    ")
+    for key in $KEYS; do
+      kubectl exec vault-0 -n vault -- vault operator unseal $key
+    done
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  delegate_to: localhost
+  become: false
+  when: vault_init is changed
+  changed_when: true
+
+- name: Enable Kubernetes auth method in Vault
+  ansible.builtin.shell: |
+    ROOT_TOKEN=$(cat {{ ansible_env.HOME }}/.vault-init.json | \
+      python3 -c "import sys,json; print(json.load(sys.stdin)['root_token'])")
+
+    kubectl exec vault-0 -n vault -- \
+      vault login $ROOT_TOKEN
+
+    kubectl exec vault-0 -n vault -- \
+      vault auth enable kubernetes || true
+
+    kubectl exec vault-0 -n vault -- \
+      vault write auth/kubernetes/config \
+        kubernetes_host="https://kubernetes.default.svc"
+
+    # Enable KV v2 secrets engine
+    kubectl exec vault-0 -n vault -- \
+      vault secrets enable -path=secret kv-v2 || true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  delegate_to: localhost
+  become: false
+  when: vault_init is changed
+  changed_when: true
+
+- name: Create Vault policies for each service
+  ansible.builtin.shell: |
+    ROOT_TOKEN=$(cat {{ ansible_env.HOME }}/.vault-init.json | \
+      python3 -c "import sys,json; print(json.load(sys.stdin)['root_token'])")
+
+    # LiteLLM policy — can only read LLM API keys
+    kubectl exec vault-0 -n vault -- sh -c "
+    VAULT_TOKEN=$ROOT_TOKEN vault policy write litellm - <<EOF
+    path \"secret/data/llm-keys\" {
+      capabilities = [\"read\"]
+    }
+    EOF"
+
+    # MinIO policy
+    kubectl exec vault-0 -n vault -- sh -c "
+    VAULT_TOKEN=$ROOT_TOKEN vault policy write minio - <<EOF
+    path \"secret/data/minio\" {
+      capabilities = [\"read\"]
+    }
+    EOF"
+
+    # Admin policy — full access
+    kubectl exec vault-0 -n vault -- sh -c "
+    VAULT_TOKEN=$ROOT_TOKEN vault policy write homelab-admin - <<EOF
+    path \"secret/*\" {
+      capabilities = [\"create\", \"read\", \"update\", \"delete\", \"list\"]
+    }
+    EOF"
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  delegate_to: localhost
+  become: false
+  when: vault_init is changed
+  changed_when: true
+
+- name: Print Vault access summary
+  ansible.builtin.debug:
+    msg:
+      - "Vault is running at: http://vault.vault.svc.cluster.local:8200"
+      - "External access:     https://vault.kloud-worx.com (after Cloudflare Tunnel)"
+      - "Port forward UI:     kubectl port-forward -n vault svc/vault 8200:8200"
+      - "Then open:           http://localhost:8200"
+      - "Root token:          cat ~/.vault-init.json | python3 -c \"import sys,json; print(json.load(sys.stdin)['root_token'])\""

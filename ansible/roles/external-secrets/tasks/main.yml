@@ -1,0 +1,164 @@
+---
+# ansible/roles/external-secrets/tasks/main.yml
+# Deploys External Secrets Operator — syncs Vault secrets to K8s Secrets
+# automatically. Apps consume normal K8s Secrets; ESO keeps them in sync
+# with Vault. Rotation: update in Vault → K8s Secret updates within 60s.
+
+- name: Add External Secrets Helm repo
+  ansible.builtin.command: >
+    helm repo add external-secrets https://charts.external-secrets.io
+  changed_when: true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Update Helm repos
+  ansible.builtin.command: helm repo update
+  changed_when: true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Install External Secrets Operator
+  ansible.builtin.command: >
+    helm upgrade --install external-secrets
+    external-secrets/external-secrets
+    --namespace external-secrets
+    --create-namespace
+    --wait
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: true
+
+- name: Create Vault service account token for ESO
+  ansible.builtin.copy:
+    dest: /tmp/eso-vault-auth.yml
+    mode: "0644"
+    content: |
+      ---
+      # Service account ESO uses to authenticate with Vault
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: external-secrets-vault
+        namespace: external-secrets
+      ---
+      # ClusterSecretStore — connects ESO to Vault
+      # All namespaces can use this store
+      apiVersion: external-secrets.io/v1beta1
+      kind: ClusterSecretStore
+      metadata:
+        name: vault-backend
+      spec:
+        provider:
+          vault:
+            server: "http://vault.vault.svc.cluster.local:8200"
+            path: "secret"
+            version: "v2"
+            auth:
+              kubernetes:
+                mountPath: "kubernetes"
+                role: "external-secrets"
+                serviceAccountRef:
+                  name: external-secrets-vault
+                  namespace: external-secrets
+
+- name: Apply ESO Vault auth config
+  ansible.builtin.command: kubectl apply -f /tmp/eso-vault-auth.yml
+  changed_when: true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Create ExternalSecret manifests for each service
+  ansible.builtin.copy:
+    dest: /tmp/external-secrets.yml
+    mode: "0644"
+    content: |
+      ---
+      # LiteLLM — LLM API keys
+      apiVersion: external-secrets.io/v1beta1
+      kind: ExternalSecret
+      metadata:
+        name: llm-api-keys
+        namespace: litellm
+      spec:
+        refreshInterval: 1m
+        secretStoreRef:
+          name: vault-backend
+          kind: ClusterSecretStore
+        target:
+          name: llm-api-keys
+          creationPolicy: Owner
+        data:
+          - secretKey: ANTHROPIC_API_KEY
+            remoteRef:
+              key: secret/llm-keys
+              property: ANTHROPIC_API_KEY
+          - secretKey: GEMINI_API_KEY
+            remoteRef:
+              key: secret/llm-keys
+              property: GEMINI_API_KEY
+          - secretKey: LITELLM_MASTER_KEY
+            remoteRef:
+              key: secret/llm-keys
+              property: LITELLM_MASTER_KEY
+      ---
+      # MinIO credentials
+      apiVersion: external-secrets.io/v1beta1
+      kind: ExternalSecret
+      metadata:
+        name: minio-credentials
+        namespace: minio
+      spec:
+        refreshInterval: 1m
+        secretStoreRef:
+          name: vault-backend
+          kind: ClusterSecretStore
+        target:
+          name: minio-credentials
+          creationPolicy: Owner
+        data:
+          - secretKey: rootUser
+            remoteRef:
+              key: secret/minio
+              property: rootUser
+          - secretKey: rootPassword
+            remoteRef:
+              key: secret/minio
+              property: rootPassword
+      ---
+      # Postgres credentials
+      apiVersion: external-secrets.io/v1beta1
+      kind: ExternalSecret
+      metadata:
+        name: postgres-credentials
+        namespace: databases
+      spec:
+        refreshInterval: 1m
+        secretStoreRef:
+          name: vault-backend
+          kind: ClusterSecretStore
+        target:
+          name: postgres-credentials
+          creationPolicy: Owner
+        data:
+          - secretKey: POSTGRES_PASSWORD
+            remoteRef:
+              key: secret/postgres
+              property: POSTGRES_PASSWORD
+          - secretKey: POSTGRES_USER
+            remoteRef:
+              key: secret/postgres
+              property: POSTGRES_USER
+
+- name: Apply ExternalSecret manifests
+  ansible.builtin.command: kubectl apply -f /tmp/external-secrets.yml
+  changed_when: true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Print ESO summary
+  ansible.builtin.debug:
+    msg:
+      - "External Secrets Operator deployed"
+      - "Vault secrets sync to K8s Secrets every 60 seconds"
+      - "To rotate a key: vault kv patch secret/llm-keys ANTHROPIC_API_KEY=new-key"
+      - "K8s Secret updates automatically within 60 seconds — zero downtime"

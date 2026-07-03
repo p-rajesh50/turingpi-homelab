@@ -1,0 +1,15 @@
+---
+# ansible/playbooks/11-cloudflare-tunnel.yml
+# Deploys Cloudflare Tunnel for remote web UI access.
+# Run after make ai-stack and make dev-tools so all services are up.
+#
+# PREREQUISITE: Cloudflare tunnel token must be in Vault:
+#   vault kv put secret/cloudflare TUNNEL_TOKEN="..." API_TOKEN="..." ZONE_ID="..." ACCOUNT_ID="..."
+
+- name: Deploy Cloudflare Tunnel
+  hosts: k8s_control
+  become: false
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  roles:
+    - role: cloudflare-tunnel

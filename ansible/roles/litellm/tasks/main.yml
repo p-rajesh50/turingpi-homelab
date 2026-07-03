@@ -1,0 +1,166 @@
+---
+# LiteLLM AI Gateway — routes to local Ollama models AND cloud LLM APIs
+# API keys are read from Kubernetes Secret 'llm-api-keys' in namespace 'litellm'
+# Create keys with: make secrets   or   scripts/secrets/setup-api-keys.sh
+
+- name: Create litellm namespace
+  ansible.builtin.command: kubectl create namespace litellm --dry-run=client -o yaml | kubectl apply -f -
+  changed_when: true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Deploy LiteLLM config map
+  ansible.builtin.copy:
+    dest: /tmp/litellm-config.yml
+    mode: "0644"
+    content: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: litellm-config
+        namespace: litellm
+      data:
+        config.yaml: |
+          model_list:
+            # ── Local models via Orin NX (free, private) ──────────────────
+            - model_name: gemma3
+              litellm_params:
+                model: ollama/gemma3:12b
+                api_base: http://{{ node_ips.orin_nx }}:{{ ollama_port }}
+
+            - model_name: mistral
+              litellm_params:
+                model: ollama/mistral
+                api_base: http://{{ node_ips.orin_nx }}:{{ ollama_port }}
+
+            - model_name: openchat
+              litellm_params:
+                model: ollama/openchat
+                api_base: http://{{ node_ips.orin_nx }}:{{ ollama_port }}
+
+            - model_name: nomic-embed-text
+              litellm_params:
+                model: ollama/nomic-embed-text
+                api_base: http://{{ node_ips.orin_nx }}:{{ ollama_port }}
+
+            # ── Embedding via Jetson Nano (offloads from Orin NX) ─────────
+            - model_name: all-minilm
+              litellm_params:
+                model: ollama/all-minilm
+                api_base: http://{{ node_ips.jetson_nano }}:{{ ollama_port }}
+
+            - model_name: phi3-mini
+              litellm_params:
+                model: ollama/phi3:mini
+                api_base: http://{{ node_ips.jetson_nano }}:{{ ollama_port }}
+
+            # ── Claude via Anthropic API ───────────────────────────────────
+            - model_name: claude-sonnet
+              litellm_params:
+                model: claude-sonnet-4-6
+                api_key: os.environ/ANTHROPIC_API_KEY
+
+            - model_name: claude-opus
+              litellm_params:
+                model: claude-opus-4-6
+                api_key: os.environ/ANTHROPIC_API_KEY
+
+            # ── Gemini via Google AI API ───────────────────────────────────
+            - model_name: gemini-pro
+              litellm_params:
+                model: gemini/gemini-1.5-pro
+                api_key: os.environ/GEMINI_API_KEY
+
+            - model_name: gemini-flash
+              litellm_params:
+                model: gemini/gemini-1.5-flash
+                api_key: os.environ/GEMINI_API_KEY
+
+          litellm_settings:
+            drop_params: true
+            success_callback: []
+
+          general_settings:
+            master_key: os.environ/LITELLM_MASTER_KEY
+
+- name: Apply LiteLLM config map
+  ansible.builtin.command: kubectl apply -f /tmp/litellm-config.yml
+  changed_when: true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Deploy LiteLLM Deployment and Service
+  ansible.builtin.copy:
+    dest: /tmp/litellm-deploy.yml
+    mode: "0644"
+    content: |
+      ---
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: litellm
+        namespace: litellm
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: litellm
+        template:
+          metadata:
+            labels:
+              app: litellm
+          spec:
+            containers:
+              - name: litellm
+                image: ghcr.io/berriai/litellm:main-latest
+                ports:
+                  - containerPort: 4000
+                args: ["--config", "/app/config.yaml", "--port", "4000"]
+                volumeMounts:
+                  - name: config
+                    mountPath: /app/config.yaml
+                    subPath: config.yaml
+                envFrom:
+                  - secretRef:
+                      name: llm-api-keys
+                resources:
+                  requests:
+                    memory: 256Mi
+                    cpu: 250m
+                  limits:
+                    memory: 512Mi
+                    cpu: 500m
+            volumes:
+              - name: config
+                configMap:
+                  name: litellm-config
+      ---
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: litellm
+        namespace: litellm
+        annotations:
+          metallb.universe.tf/loadBalancerIPs: "{{ litellm_service_ip }}"
+      spec:
+        type: LoadBalancer
+        selector:
+          app: litellm
+        ports:
+          - port: 80
+            targetPort: 4000
+            name: http
+
+- name: Apply LiteLLM deployment
+  ansible.builtin.command: kubectl apply -f /tmp/litellm-deploy.yml
+  changed_when: true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Print LiteLLM summary
+  ansible.builtin.debug:
+    msg:
+      - "LiteLLM Gateway: http://{{ litellm_service_ip }}/v1"
+      - "OpenAI-compatible endpoint for all your apps and agents"
+      - "Models available: gemma3, mistral, openchat, claude-sonnet, claude-opus, gemini-pro, gemini-flash"
+      - "Run 'make secrets' to configure your Anthropic and Gemini API keys"

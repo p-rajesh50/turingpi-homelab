@@ -1,0 +1,109 @@
+---
+# ansible/playbooks/04-cluster-addons.yml
+# MetalLB, Ingress-NGINX, Prometheus+Grafana, Kubernetes Dashboard
+
+- name: Deploy cluster networking and monitoring add-ons
+  hosts: k8s_control
+  become: false
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+  tasks:
+    - name: Add required Helm repos
+      ansible.builtin.command: "helm repo add {{ item.name }} {{ item.url }}"
+      changed_when: true
+      loop:
+        - { name: metallb,              url: "https://metallb.github.io/metallb" }
+        - { name: ingress-nginx,        url: "https://kubernetes.github.io/ingress-nginx" }
+        - { name: prometheus-community, url: "https://prometheus-community.github.io/helm-charts" }
+        - { name: kubernetes-dashboard, url: "https://kubernetes.github.io/dashboard/" }
+
+    - name: Update Helm repos
+      ansible.builtin.command: helm repo update
+      changed_when: true
+
+    # ── MetalLB ──────────────────────────────────────────────────────────────
+    - name: Install MetalLB
+      ansible.builtin.command: >
+        helm upgrade --install metallb metallb/metallb
+        --namespace metallb-system --create-namespace --wait
+      changed_when: true
+
+    - name: Configure MetalLB IP pool
+      ansible.builtin.copy:
+        dest: /tmp/metallb-pool.yml
+        content: |
+          ---
+          apiVersion: metallb.io/v1beta1
+          kind: IPAddressPool
+          metadata:
+            name: cluster1-pool
+            namespace: metallb-system
+          spec:
+            addresses:
+              - {{ metallb_ip_range_cluster1 }}
+          ---
+          apiVersion: metallb.io/v1beta1
+          kind: L2Advertisement
+          metadata:
+            name: cluster1-l2
+            namespace: metallb-system
+        mode: "0644"
+
+    - name: Apply MetalLB pool
+      ansible.builtin.command: kubectl apply -f /tmp/metallb-pool.yml
+      changed_when: true
+
+    # ── Ingress-NGINX ─────────────────────────────────────────────────────────
+    - name: Install Ingress-NGINX
+      ansible.builtin.command: >
+        helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx
+        --namespace ingress-nginx --create-namespace
+        --set controller.service.type=LoadBalancer
+        --wait
+      changed_when: true
+
+    # ── Prometheus + Grafana ──────────────────────────────────────────────────
+    - name: Install kube-prometheus-stack
+      ansible.builtin.command: >
+        helm upgrade --install monitoring prometheus-community/kube-prometheus-stack
+        --namespace monitoring --create-namespace
+        --values {{ playbook_dir }}/../kubernetes/helm-values/prometheus-stack.yml
+        --wait
+      changed_when: true
+
+    # ── Kubernetes Dashboard ──────────────────────────────────────────────────
+    - name: Install Kubernetes Dashboard
+      ansible.builtin.command: >
+        helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard
+        --namespace kubernetes-dashboard --create-namespace --wait
+      changed_when: true
+
+    - name: Create Dashboard admin user
+      ansible.builtin.copy:
+        dest: /tmp/dashboard-admin.yml
+        content: |
+          ---
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: admin-user
+            namespace: kubernetes-dashboard
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: admin-user
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: cluster-admin
+          subjects:
+            - kind: ServiceAccount
+              name: admin-user
+              namespace: kubernetes-dashboard
+        mode: "0644"
+
+    - name: Apply Dashboard admin user
+      ansible.builtin.command: kubectl apply -f /tmp/dashboard-admin.yml
+      changed_when: true

@@ -1,0 +1,16 @@
+# Managed by Ansible — do not edit manually
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    eth0:
+      dhcp4: false
+      addresses:
+        - "{{ ansible_host }}/24"
+      routes:
+        - to: default
+          via: "{{ cluster_gateway }}"
+      nameservers:
+        addresses:
+          - "{{ cluster_dns }}"
+          - "8.8.8.8"

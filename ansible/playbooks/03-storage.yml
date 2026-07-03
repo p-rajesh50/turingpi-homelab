@@ -1,0 +1,49 @@
+---
+# ansible/playbooks/03-storage.yml
+# Deploys Longhorn (NVMe block storage) + NFS (SATA shared storage) + MinIO (S3)
+
+# ── Longhorn prereqs on all RK1 nodes ────────────────────────────────────────
+- name: Longhorn prerequisites on all RK1 nodes
+  hosts: rk1_nodes
+  become: true
+  tags: [longhorn-prep]
+
+  tasks:
+    - name: Install Longhorn system dependencies
+      ansible.builtin.apt:
+        name:
+          - open-iscsi
+          - nfs-common
+          - util-linux
+          - e2fsprogs
+        state: present
+        update_cache: true
+
+    - name: Enable iscsid
+      ansible.builtin.systemd:
+        name: iscsid
+        enabled: true
+        state: started
+
+    - name: Create Longhorn storage directory on NVMe
+      ansible.builtin.file:
+        path: "{{ longhorn_storage_path }}"
+        state: directory
+        mode: "0755"
+
+# ── NFS server on rk1-worker-2 (slot 4, /dev/sda) ───────────────────────────
+- name: Configure NFS server on rk1-worker-2
+  hosts: rk1_nodes
+  become: true
+  tags: [nfs]
+  roles:
+    - role: nfs-server
+
+# ── Deploy Longhorn + NFS provisioner + MinIO via Helm ───────────────────────
+- name: Deploy storage stack
+  hosts: k8s_control
+  become: false
+  tags: [storage-deploy]
+  roles:
+    - role: longhorn
+    - role: minio

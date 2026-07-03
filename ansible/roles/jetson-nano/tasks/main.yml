@@ -1,0 +1,106 @@
+---
+# Configures standalone Nvidia Jetson Nano Developer Kit.
+# Role: Dedicated embedding server + small model experimentation node.
+# JetPack 4.6 must be pre-flashed via Nvidia SDK Manager.
+
+- name: Install Docker
+  ansible.builtin.apt:
+    name: [docker.io, nvidia-container-toolkit]
+    state: present
+    update_cache: true
+
+- name: Configure Docker NVIDIA runtime
+  ansible.builtin.copy:
+    dest: /etc/docker/daemon.json
+    content: |
+      {
+        "runtimes": {
+          "nvidia": {
+            "path": "nvidia-container-runtime",
+            "runtimeArgs": []
+          }
+        },
+        "default-runtime": "nvidia"
+      }
+    mode: "0644"
+  notify: Restart Docker
+
+- name: Add admin user to docker group
+  ansible.builtin.user:
+    name: "{{ admin_user }}"
+    groups: docker
+    append: true
+
+- name: Enable Docker
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
+
+# ── Ollama (small models + embeddings) ───────────────────────────────────────
+- name: Install Ollama
+  ansible.builtin.shell: curl -fsSL https://ollama.ai/install.sh | sh
+  args:
+    creates: /usr/local/bin/ollama
+
+- name: Deploy Ollama systemd service for Nano
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/ollama.service
+    content: |
+      [Unit]
+      Description=Ollama LLM Server (Jetson Nano)
+      After=network-online.target
+
+      [Service]
+      User={{ admin_user }}
+      ExecStart=/usr/local/bin/ollama serve
+      Restart=always
+      RestartSec=3
+      Environment="OLLAMA_HOST=0.0.0.0:{{ ollama_port }}"
+      Environment="OLLAMA_MODELS=/home/{{ admin_user }}/.ollama/models"
+      # Nano has only 4GB shared memory — limit context size
+      Environment="OLLAMA_NUM_CTX=2048"
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: "0644"
+  notify: Restart Ollama
+
+- name: Enable and start Ollama on Nano
+  ansible.builtin.systemd:
+    name: ollama
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Wait for Ollama to be ready
+  ansible.builtin.uri:
+    url: "http://localhost:{{ ollama_port }}/api/tags"
+    status_code: 200
+  register: ollama_ready
+  until: ollama_ready.status == 200
+  retries: 15
+  delay: 5
+  become: false
+
+- name: Pull models for Jetson Nano
+  ansible.builtin.command: "ollama pull {{ item }}"
+  loop: "{{ ollama_models_nano }}"
+  become: false
+  changed_when: true
+
+# ── Firewall ──────────────────────────────────────────────────────────────────
+- name: Allow Ollama from cluster subnet
+  community.general.ufw:
+    rule: allow
+    src: "{{ cluster_subnet }}"
+    port: "{{ ollama_port }}"
+    proto: tcp
+
+- name: Print Jetson Nano summary
+  ansible.builtin.debug:
+    msg:
+      - "Jetson Nano Ollama: http://{{ ansible_host }}:{{ ollama_port }}"
+      - "Embedding models: {{ ollama_models_nano | join(', ') }}"
+      - "LiteLLM routes: phi3-mini, all-minilm → this node"
+      - "Tip: Use all-minilm for high-throughput embedding workloads"

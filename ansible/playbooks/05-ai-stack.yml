@@ -1,0 +1,28 @@
+---
+# ansible/playbooks/05-ai-stack.yml
+# Deploys the full AI/ML stack on Kubernetes:
+#   - LiteLLM AI Gateway (routes to Orin NX + Claude + Gemini)
+#   - Qdrant vector database
+#   - Postgres + pgvector
+#   - Open WebUI
+#   - JupyterHub
+#   - LangGraph Server
+#   - Prefect
+#   - MCP Servers (postgres, qdrant, minio, web-search)
+#
+# PREREQUISITE: Run 03-storage.yml first (Longhorn + NFS + MinIO must be up)
+# PREREQUISITE: Run scripts/secrets/setup-api-keys.sh to store API keys
+
+- name: Deploy AI and ML stack
+  hosts: k8s_control
+  become: false
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+  roles:
+    - role: litellm
+    - role: qdrant
+    - role: jupyterhub
+    - role: langraph-server
+    - role: prefect
+    - role: mcp-servers

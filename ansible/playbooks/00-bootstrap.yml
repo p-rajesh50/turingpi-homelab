@@ -1,0 +1,72 @@
+---
+# ansible/playbooks/00-bootstrap.yml
+# Run ONCE with password auth immediately after OS flash.
+# Pushes SSH key, sets hostname, applies static IP, configures sudo.
+#
+# Usage:
+#   ansible-playbook ansible/playbooks/00-bootstrap.yml \
+#     -i ansible/inventory/hosts.yml \
+#     --limit rk1_nodes \
+#     --ask-pass --ask-become-pass
+
+- name: Bootstrap RK1 nodes
+  hosts: rk1_nodes
+  gather_facts: false
+  become: true
+
+  pre_tasks:
+    - name: Wait for nodes to be reachable
+      ansible.builtin.wait_for_connection:
+        timeout: 120
+
+    - name: Gather minimal facts
+      ansible.builtin.setup:
+        gather_subset: min
+
+  tasks:
+    - name: Ensure .ssh directory exists
+      ansible.builtin.file:
+        path: "/home/{{ admin_user }}/.ssh"
+        state: directory
+        owner: "{{ admin_user }}"
+        group: "{{ admin_user }}"
+        mode: "0700"
+
+    - name: Deploy SSH public key
+      ansible.posix.authorized_key:
+        user: "{{ admin_user }}"
+        key: "{{ lookup('file', ssh_public_key_path) }}"
+        state: present
+
+    - name: Set hostname
+      ansible.builtin.hostname:
+        name: "{{ inventory_hostname }}"
+
+    - name: Update /etc/hosts with hostname
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        regexp: "^127\\.0\\.1\\.1"
+        line: "127.0.1.1  {{ inventory_hostname }}"
+
+    - name: Grant passwordless sudo to admin user
+      ansible.builtin.copy:
+        dest: "/etc/sudoers.d/{{ admin_user }}"
+        content: "{{ admin_user }} ALL=(ALL) NOPASSWD:ALL\n"
+        mode: "0440"
+        validate: "visudo -cf %s"
+
+    - name: Deploy static IP via Netplan
+      ansible.builtin.template:
+        src: "{{ playbook_dir }}/../roles/common/templates/netplan.yaml.j2"
+        dest: /etc/netplan/99-cluster.yaml
+        mode: "0600"
+      notify: Apply netplan
+
+    - name: Set timezone
+      community.general.timezone:
+        name: "{{ timezone }}"
+
+  handlers:
+    - name: Apply netplan
+      ansible.builtin.command: netplan apply
+      changed_when: true

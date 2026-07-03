@@ -1,0 +1,54 @@
+---
+- name: Add MinIO Helm repo
+  ansible.builtin.command: helm repo add minio https://charts.min.io/
+  changed_when: true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Update Helm repos
+  ansible.builtin.command: helm repo update
+  changed_when: true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Create MinIO namespace
+  ansible.builtin.command: kubectl create namespace minio --dry-run=client -o yaml | kubectl apply -f -
+  changed_when: true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Create MinIO credentials secret
+  ansible.builtin.shell: |
+    kubectl create secret generic minio-credentials \
+      --from-literal=rootUser=minioadmin \
+      --from-literal=rootPassword=minioadmin123 \
+      --namespace minio \
+      --dry-run=client -o yaml | kubectl apply -f -
+  changed_when: true
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+
+- name: Install MinIO
+  ansible.builtin.command: >
+    helm upgrade --install minio minio/minio
+    --namespace minio
+    --version {{ minio_version }}
+    --set mode=standalone
+    --set persistence.enabled=true
+    --set persistence.storageClass=longhorn
+    --set persistence.size={{ minio_storage_size }}
+    --set service.type=LoadBalancer
+    --set service.loadBalancerIP={{ minio_service_ip }}
+    --set existingSecret=minio-credentials
+    --wait
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  changed_when: true
+
+- name: Print MinIO summary
+  ansible.builtin.debug:
+    msg:
+      - "MinIO Console:  http://{{ minio_service_ip }}:9001"
+      - "MinIO API (S3): http://{{ minio_service_ip }}:9000"
+      - "Credentials:    minioadmin / minioadmin123"
+      - "IMPORTANT: Change credentials via: make secrets"

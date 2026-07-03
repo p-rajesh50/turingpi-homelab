@@ -1,0 +1,37 @@
+---
+# cluster2/ansible/group_vars/all/vars.yml
+# TuringPi 2 + CM4 cluster variables
+
+cluster_name: turingpi-cluster2
+admin_user: ubuntu
+timezone: "America/Chicago"
+locale: "en_US.UTF-8"
+
+cluster_subnet: "10.0.0.0/24"
+cluster_gateway: "10.0.0.1"
+cluster_dns: "10.0.0.1"
+bmc_ip: "10.0.0.20"              # tpi2-bmc — configure before use
+
+pod_cidr: "10.245.0.0/16"        # Different from cluster 1 (10.244.0.0/16)
+service_cidr: "10.97.0.0/12"     # Different from cluster 1 (10.96.0.0/12)
+
+metallb_ip_range: "10.0.0.50-10.0.0.69"
+
+kubernetes_version: "1.30"
+kubernetes_cni: "flannel"
+
+ssh_public_key_path: "~/.ssh/turingpi_homelab.pub"
+
+common_packages:
+  - curl
+  - wget
+  - git
+  - vim
+  - htop
+  - jq
+  - net-tools
+  - nfs-common
+  - unattended-upgrades
+  - fail2ban
+  - ufw
+  - chrony

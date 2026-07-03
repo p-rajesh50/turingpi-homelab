@@ -1,0 +1,13 @@
+---
+# ansible/playbooks/06-dev-tools.yml
+# Deploys developer tooling:
+#   - Gitea (self-hosted Git)
+#   - Gitea Actions runner (CI/CD)
+
+- name: Deploy developer tools
+  hosts: k8s_control
+  become: false
+  environment:
+    KUBECONFIG: /etc/kubernetes/admin.conf
+  roles:
+    - role: gitea

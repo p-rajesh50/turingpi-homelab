@@ -1,0 +1,32 @@
+# Secrets — never commit
+ansible/group_vars/all/vault.yml
+*.vault
+.turingpi
+**/*.pem
+**/*.key
+
+# OS images — too large for git
+scripts/os-flash/images/
+
+# Local overrides
+*.local.yml
+*.local.yaml
+
+# Ansible artifacts
+*.retry
+/tmp/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+ml-env/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Kubeconfig (fetched automatically by playbook)
+*.kubeconfig

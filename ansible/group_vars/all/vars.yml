@@ -1,0 +1,136 @@
+---
+# ansible/group_vars/all/vars.yml
+# ─────────────────────────────────────────────────────────────────────────────
+# Single source of truth for the entire homelab.
+# All IPs, versions, and service config live here.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Identity ──────────────────────────────────────────────────────────────────
+cluster_name: turingpi-cluster1
+github_username: p-rajesh50
+admin_user: ubuntu
+admin_email: "your@email.com"        # Update with your email (used by cert-manager)
+timezone: "America/Chicago"
+locale: "en_US.UTF-8"
+
+# ── Network ───────────────────────────────────────────────────────────────────
+cluster_subnet: "10.0.0.0/24"
+cluster_gateway: "10.0.0.1"
+cluster_dns: "10.0.0.1"
+
+# BMC
+bmc_ip: "10.0.0.10"                  # tpi1-bmc (Cluster 1) — already configured
+bmc2_ip: "10.0.0.20"                 # tpi2-bmc (Cluster 2) — future
+
+# Node static IPs — matches confirmed slot mapping
+node_ips:
+  rk1_control:   "10.0.0.11"         # slot 1
+  rk1_worker_1:  "10.0.0.12"         # slot 3
+  rk1_worker_2:  "10.0.0.13"         # slot 4
+  orin_nx:       "10.0.0.14"         # slot 2
+  jetson_nano:   "10.0.0.15"         # standalone
+
+# Kubernetes networking (must not overlap with 10.0.0.0/24)
+pod_cidr: "10.244.0.0/16"
+service_cidr: "10.96.0.0/12"
+
+# MetalLB LoadBalancer IP pools
+metallb_ip_range_cluster1: "10.0.0.30-10.0.0.49"
+metallb_ip_range_cluster2: "10.0.0.50-10.0.0.69"   # future
+
+# ── SSH ───────────────────────────────────────────────────────────────────────
+ssh_public_key_path: "~/.ssh/turingpi_homelab.pub"
+ssh_private_key_path: "~/.ssh/turingpi_homelab"
+
+# ── Kubernetes ────────────────────────────────────────────────────────────────
+kubernetes_version: "1.30"
+kubernetes_cni: "flannel"
+containerd_version: "1.7"
+
+# ── Storage ───────────────────────────────────────────────────────────────────
+# Longhorn (replicated block storage — NVMe on all RK1 nodes)
+longhorn_version: "1.6.2"
+longhorn_replica_count: 2            # replicate across 2 of 3 nodes
+longhorn_storage_path: "/var/lib/longhorn"
+longhorn_nvme_device: "/dev/nvme0n1"
+
+# NFS (shared filesystem — SATA SSD on rk1-worker-2 / slot 4)
+nfs_server_ip: "10.0.0.13"
+nfs_export_path: "/srv/nfs/k8s"
+nfs_sata_device: "/dev/sda"
+nfs_sata_mount: "/mnt/sata"
+
+# MinIO (S3-compatible object storage — backed by Longhorn PVC)
+minio_version: "5.0.15"
+minio_storage_size: "200Gi"
+minio_service_ip: "10.0.0.35"       # from MetalLB pool
+
+# ── AI / LLM Stack ────────────────────────────────────────────────────────────
+# Ollama on Orin NX
+ollama_port: 11434
+ollama_models_orin:
+  - "gemma3:12b"                     # Gemma 3 12B (quantized, fits in 16GB)
+  - "mistral"
+  - "openchat"                       # OpenClaw equivalent
+  - "nomic-embed-text"               # Embeddings (primary)
+
+# Ollama on Jetson Nano (small models + embeddings only)
+ollama_models_nano:
+  - "phi3:mini"                      # 3.8B — runs well on Nano 4GB
+  - "tinyllama"                      # 1.1B — very fast on Nano
+  - "all-minilm"                     # Lightweight embeddings
+
+# LiteLLM AI Gateway
+litellm_version: "1.40.0"
+litellm_master_key: ""               # Set via: make secrets (stored in K8s Secret)
+litellm_service_ip: "10.0.0.30"     # First MetalLB IP — primary cluster endpoint
+
+# Open WebUI
+open_webui_port: 3000
+open_webui_version: "latest"
+
+# Qdrant vector database
+qdrant_version: "1.9.0"
+qdrant_storage_size: "50Gi"
+
+# JupyterHub
+jupyterhub_version: "3.3.7"
+jupyterhub_storage_size: "20Gi"
+
+# LangGraph Server
+langgraph_version: "latest"
+
+# Prefect
+prefect_version: "2.19.0"
+
+# Gitea
+gitea_version: "1.21.0"
+gitea_storage_size: "20Gi"
+gitea_service_ip: "10.0.0.36"       # from MetalLB pool
+
+# Postgres
+postgres_version: "16"
+postgres_storage_size: "100Gi"       # Longhorn PVC
+
+# ── Monitoring ────────────────────────────────────────────────────────────────
+grafana_service_ip: "10.0.0.37"     # from MetalLB pool
+prometheus_retention: "15d"
+prometheus_storage_size: "20Gi"
+
+# ── Common packages (installed on every node) ─────────────────────────────────
+common_packages:
+  - curl
+  - wget
+  - git
+  - vim
+  - htop
+  - jq
+  - net-tools
+  - nfs-common
+  - unattended-upgrades
+  - fail2ban
+  - ufw
+  - chrony
+  - lsof
+  - iotop
+  - sysstat

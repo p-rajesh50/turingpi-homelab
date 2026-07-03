@@ -1,0 +1,18 @@
+---
+# ansible/playbooks/08-jetson-nano.yml
+# Configures the standalone Nvidia Jetson Nano Developer Kit.
+#
+# Role: Dedicated embedding server + small model experimentation
+#   - Ollama (phi3:mini, tinyllama, all-minilm embeddings)
+#   - Triton Inference Server (TensorRT optimized models)
+#   - Python ML stack
+#
+# PREREQUISITE: JetPack 4.6 must be flashed via Nvidia SDK Manager.
+# See docs/jetson-nano-flash.md for the flashing procedure.
+
+- name: Configure Jetson Nano Developer Kit
+  hosts: jetson_nano
+  become: true
+  roles:
+    - role: common
+    - role: jetson-nano

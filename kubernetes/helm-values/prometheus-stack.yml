@@ -1,0 +1,37 @@
+# ARM64-tuned Prometheus + Grafana for RK1 nodes
+grafana:
+  adminPassword: "changeme"    # Update via: make secrets
+  persistence:
+    enabled: true
+    storageClassName: longhorn
+    size: 5Gi
+  service:
+    type: LoadBalancer
+    loadBalancerIP: "10.0.0.37"
+
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: longhorn
+          resources:
+            requests:
+              storage: 20Gi
+    resources:
+      requests: { memory: 512Mi, cpu: 250m }
+      limits:   { memory: 1Gi,   cpu: 500m }
+
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests: { memory: 128Mi, cpu: 50m }
+      limits:   { memory: 256Mi }
+
+# Disable components not exposed by kubeadm by default
+kubeEtcd:             { enabled: false }
+kubeControllerManager: { enabled: false }
+kubeScheduler:        { enabled: false }
+kubeProxy:            { enabled: false }
+nodeExporter:         { enabled: true }

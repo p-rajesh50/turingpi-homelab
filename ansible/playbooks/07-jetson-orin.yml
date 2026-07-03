@@ -1,0 +1,18 @@
+---
+# ansible/playbooks/07-jetson-orin.yml
+# Configures Nvidia Orin NX (slot 2) after JetPack 7 is manually flashed.
+# See docs/jetson-orin-flash.md for the JetPack 7 flashing procedure.
+#
+# Installs:
+#   - Docker with NVIDIA runtime
+#   - Ollama (Gemma4, Mistral, OpenChat, nomic-embed-text)
+#   - Open WebUI
+#   - NeMo inference container
+#   - Python ML stack (PyTorch for Jetson, transformers, HuggingFace)
+
+- name: Configure Nvidia Orin NX
+  hosts: jetson_orin
+  become: true
+  roles:
+    - role: common
+    - role: jetson-orin

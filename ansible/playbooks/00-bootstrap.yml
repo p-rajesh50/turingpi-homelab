@@ -12,6 +12,8 @@
 - name: Bootstrap RK1 nodes
   hosts: rk1_nodes
   gather_facts: false
+  vars_files:
+    - ../group_vars/all/vars.yml
   become: true
 
   pre_tasks:

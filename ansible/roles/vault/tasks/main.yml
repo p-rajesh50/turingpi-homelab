@@ -240,6 +240,27 @@
   when: vault_init is changed
   changed_when: true
 
+- name: Create Vault Kubernetes auth role for External Secrets Operator
+  ansible.builtin.shell: |
+    ROOT_TOKEN=$(python3 -c "
+    import json
+    print(json.load(open('{{ lookup('env', 'HOME') }}/.vault-init.json'))['root_token'])
+    ")
+    kubectl exec vault-0 -n vault -- sh -c "
+    VAULT_TOKEN=$ROOT_TOKEN vault write auth/kubernetes/role/external-secrets \
+      bound_service_account_names=external-secrets-vault \
+      bound_service_account_namespaces=external-secrets \
+      policies=homelab-admin \
+      ttl=24h
+    "
+  args:
+    executable: /bin/bash
+  environment:
+    KUBECONFIG: "{{ lookup('env', 'HOME') }}/.kube/turingpi-cluster1.conf"
+  delegate_to: localhost
+  become: false
+  changed_when: true
+
 - name: Print Vault access summary
   ansible.builtin.debug:
     msg:

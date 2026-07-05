@@ -1,6 +1,6 @@
 ---
-# Only runs on the node with nfs_server: true (rk1-worker-2, slot 4)
-# Formats /dev/sda (512GB SATA SSD) and exports it as NFS
+# Only runs on the node with nfs_server: true (rk1-worker-1, slot 3)
+# /dev/sda2 is a pre-existing 476.4G partition on the SATA SSD — no partitioning needed
 
 - name: Skip if not NFS server
   ansible.builtin.meta: end_host
@@ -8,28 +8,18 @@
 
 - name: Install NFS server
   ansible.builtin.apt:
-    name: [nfs-kernel-server, parted, e2fsprogs]
+    name: [nfs-kernel-server, e2fsprogs]
     state: present
 
-- name: Check if SATA device is already formatted
-  ansible.builtin.command: "blkid {{ nfs_sata_device }}"
+- name: Check filesystem type on SATA partition
+  ansible.builtin.command: "blkid -s TYPE -o value {{ nfs_sata_device }}"
   register: blkid_result
   changed_when: false
   failed_when: false
 
-- name: Create partition table on SATA SSD (first time only)
-  ansible.builtin.command: "parted -s {{ nfs_sata_device }} mklabel gpt mkpart primary ext4 0% 100%"
-  when: blkid_result.rc != 0
-  changed_when: true
-
-- name: Wait for kernel to register new partition
-  ansible.builtin.command: "partprobe {{ nfs_sata_device }} && udevadm settle"
-  when: blkid_result.rc != 0
-  changed_when: false
-
-- name: Format SATA SSD as ext4 (first time only)
-  ansible.builtin.command: "mkfs.ext4 -F {{ nfs_sata_device }}1"
-  when: blkid_result.rc != 0
+- name: Format SATA partition as ext4 (only if not already ext4)
+  ansible.builtin.command: "mkfs.ext4 -F {{ nfs_sata_device }}"
+  when: blkid_result.stdout | trim != 'ext4'
   changed_when: true
 
 - name: Create SATA mount point
@@ -38,10 +28,10 @@
     state: directory
     mode: "0755"
 
-- name: Mount SATA SSD
+- name: Mount SATA partition
   ansible.posix.mount:
     path: "{{ nfs_sata_mount }}"
-    src: "{{ nfs_sata_device }}1"
+    src: "{{ nfs_sata_device }}"
     fstype: ext4
     opts: defaults,noatime
     state: mounted

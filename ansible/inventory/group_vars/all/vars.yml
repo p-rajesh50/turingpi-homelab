@@ -54,10 +54,10 @@ longhorn_replica_count: 2            # replicate across 2 of 3 nodes
 longhorn_storage_path: "/var/lib/longhorn"
 longhorn_nvme_device: "/dev/nvme0n1"
 
-# NFS (shared filesystem — SATA SSD on rk1-worker-2 / slot 4)
-nfs_server_ip: "10.0.0.13"
+# NFS (shared filesystem — SATA SSD on rk1-worker-1 / slot 3, pre-partitioned /dev/sda2)
+nfs_server_ip: "10.0.0.12"
 nfs_export_path: "/mnt/sata/k8s"
-nfs_sata_device: "/dev/sda"
+nfs_sata_device: "/dev/sda2"
 nfs_sata_mount: "/mnt/sata"
 
 # MinIO (S3-compatible object storage — backed by Longhorn PVC)

@@ -61,8 +61,8 @@ agentic app runtime, secrets management, and remote access.
 10.0.0.5          TrueNAS (future)
 10.0.0.10         Cluster 1 BMC (tpi1-bmc)
 10.0.0.11         rk1-control  (slot 1)
-10.0.0.12         rk1-worker-1 (slot 3)
-10.0.0.13         rk1-worker-2 (slot 4) — also NFS server
+10.0.0.12         rk1-worker-1 (slot 3) — also NFS server (/dev/sda2)
+10.0.0.13         rk1-worker-2 (slot 4)
 10.0.0.14         orin-nx      (slot 2)
 10.0.0.15         jetson-nano  (standalone)
 10.0.0.20-24      Cluster 2 (future)
@@ -185,9 +185,9 @@ service_cidr: "10.96.0.0/12"
 metallb_ip_range_cluster1: "10.0.0.30-10.0.0.49"
 kubernetes_version: "1.30"
 longhorn_version: "1.6.2"
-nfs_server_ip: "10.0.0.13"
-nfs_export_path: "/srv/nfs/k8s"
-nfs_sata_device: "/dev/sda"
+nfs_server_ip: "10.0.0.12"
+nfs_export_path: "/mnt/sata/k8s"
+nfs_sata_device: "/dev/sda2"
 ollama_port: 11434
 litellm_service_ip: "10.0.0.30"
 ```
@@ -217,8 +217,8 @@ tpi --host $BMC_IP --user $BMC_USER --password $BMC_PASSWORD power off --node 1
 
 | Storage | Device | Mount | StorageClass | Used For |
 |---|---|---|---|---|
-| Longhorn | /dev/nvme0n1 on all 3 nodes | /var/lib/longhorn | longhorn (default) | Databases, stateful apps — replicated |
-| NFS | /dev/sda on rk1-worker-2 | /mnt/sata → /srv/nfs/k8s | nfs-shared | Shared files, ML models, artifacts |
+| Longhorn | /dev/nvme0n1 on rk1-worker-1 + rk1-worker-2 | /var/lib/longhorn | longhorn (default) | Databases, stateful apps — replicated |
+| NFS | /dev/sda2 on rk1-worker-1 (slot 3, 476.4G) | /mnt/sata → /mnt/sata/k8s | nfs-shared | Shared files, ML models, artifacts |
 | MinIO | Longhorn PVC 200Gi | — | — | S3-compatible object storage |
 
 ---
@@ -433,4 +433,4 @@ agent = Agent(
 5. **Kubeconfig** path is `~/.kube/turingpi-cluster1.conf`
 6. **BMC credentials** are in `~/.turingpi` — source it before BMC commands
 7. **Netplan template** uses `{{ node_static_ip }}` not `{{ ansible_host }}`
-8. **Storage devices:** NVMe=`/dev/nvme0n1` (Longhorn), SATA=`/dev/sda` (NFS, on slot 4 only)
+8. **Storage devices:** NVMe=`/dev/nvme0n1` (Longhorn, slot 3+4), SATA=`/dev/sda2` (NFS, slot 3 / rk1-worker-1 only — pre-partitioned, 476.4G)

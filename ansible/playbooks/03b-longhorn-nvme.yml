@@ -1,0 +1,261 @@
+---
+# ansible/playbooks/03b-longhorn-nvme.yml
+# Moves Longhorn storage from eMMC to NVMe on both worker nodes.
+# Run after make storage — requires Longhorn already installed.
+# Phases: 1=format NVMe, 2=register in Longhorn, 3=disable eMMC+set default path,
+#         4=migrate existing volumes, 5=reinstall MinIO.
+
+# ── Phase 1: Format + mount NVMe on both workers ─────────────────────────────
+- name: Prepare NVMe disks for Longhorn
+  hosts: k8s_workers
+  become: true
+  tags: [nvme-format]
+
+  tasks:
+    - name: Format NVMe as ext4 with longhorn-nvme label
+      ansible.builtin.shell: mkfs.ext4 -L {{ longhorn_nvme_label }} {{ longhorn_nvme_device }}
+      args:
+        creates: /dev/disk/by-label/{{ longhorn_nvme_label }}
+
+    - name: Create Longhorn NVMe mount point
+      ansible.builtin.file:
+        path: "{{ longhorn_nvme_path }}"
+        state: directory
+        mode: "0755"
+
+    - name: Mount NVMe and persist to fstab
+      ansible.posix.mount:
+        path: "{{ longhorn_nvme_path }}"
+        src: "LABEL={{ longhorn_nvme_label }}"
+        fstype: ext4
+        opts: defaults,noatime
+        state: mounted
+
+# ── Phase 2: Register NVMe disks in Longhorn ─────────────────────────────────
+- name: Register NVMe disks in Longhorn
+  hosts: k8s_control
+  become: false
+  tags: [nvme-register]
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+  tasks:
+    - name: Add nvme-disk to rk1-worker-1
+      ansible.builtin.shell: |
+        kubectl -n longhorn-system patch node.longhorn.io rk1-worker-1 \
+          --type=merge \
+          --patch='{"spec":{"disks":{"nvme-disk":{"path":"{{ longhorn_nvme_path }}","allowScheduling":true,"storageReserved":{{ longhorn_nvme_reserved }}}}}}'
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: Add nvme-disk to rk1-worker-2
+      ansible.builtin.shell: |
+        kubectl -n longhorn-system patch node.longhorn.io rk1-worker-2 \
+          --type=merge \
+          --patch='{"spec":{"disks":{"nvme-disk":{"path":"{{ longhorn_nvme_path }}","allowScheduling":true,"storageReserved":{{ longhorn_nvme_reserved }}}}}}'
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: Wait 30s for Longhorn to recognize NVMe disks
+      ansible.builtin.pause:
+        seconds: 30
+
+# ── Phase 3: Disable eMMC scheduling + set global default data path ───────────
+- name: Disable eMMC scheduling in Longhorn
+  hosts: k8s_control
+  become: false
+  tags: [nvme-disable-emmc]
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+  tasks:
+    - name: Disable eMMC scheduling on rk1-worker-1
+      ansible.builtin.shell: |
+        kubectl -n longhorn-system patch node.longhorn.io rk1-worker-1 \
+          --type=merge \
+          --patch='{"spec":{"disks":{"{{ longhorn_emmc_disk_name }}":{"path":"/var/lib/longhorn","allowScheduling":false,"storageReserved":0}}}}'
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: Disable eMMC scheduling on rk1-worker-2
+      ansible.builtin.shell: |
+        kubectl -n longhorn-system patch node.longhorn.io rk1-worker-2 \
+          --type=merge \
+          --patch='{"spec":{"disks":{"{{ longhorn_emmc_disk_name }}":{"path":"/var/lib/longhorn","allowScheduling":false,"storageReserved":0}}}}'
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: Set Longhorn default-data-path to NVMe
+      ansible.builtin.shell: |
+        kubectl -n longhorn-system patch settings.longhorn.io default-data-path \
+          --type=merge \
+          --patch='{"value":"{{ longhorn_nvme_path }}"}'
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+# ── Phase 4: Migrate existing eMMC volumes to NVMe ───────────────────────────
+- name: Migrate Prometheus and Grafana volumes to NVMe
+  hosts: k8s_control
+  become: false
+  tags: [nvme-migrate]
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+  tasks:
+    # ── Prometheus volume ─────────────────────────────────────────────────────
+    - name: Discover Prometheus volume name
+      ansible.builtin.shell: |
+        kubectl -n longhorn-system get volume -o name | grep pvc-02365a2e | head -1 | cut -d/ -f2
+      args:
+        executable: /bin/bash
+      register: prometheus_volume
+      changed_when: false
+
+    - name: Scale Prometheus volume to 2 replicas
+      ansible.builtin.shell: |
+        kubectl -n longhorn-system patch volume {{ prometheus_volume.stdout }} \
+          --type=merge --patch='{"spec":{"numberOfReplicas":2}}'
+      args:
+        executable: /bin/bash
+      changed_when: true
+      when: prometheus_volume.stdout != ""
+
+    - name: Wait for Prometheus volume to be healthy with 2 replicas
+      ansible.builtin.shell: |
+        kubectl -n longhorn-system get volume {{ prometheus_volume.stdout }} \
+          -o jsonpath='{.status.robustness}'
+      args:
+        executable: /bin/bash
+      register: prom_health
+      until: prom_health.stdout == "Healthy"
+      retries: 30
+      delay: 10
+      changed_when: false
+      when: prometheus_volume.stdout != ""
+
+    - name: Scale Prometheus volume to 1 replica (evicts eMMC replica)
+      ansible.builtin.shell: |
+        kubectl -n longhorn-system patch volume {{ prometheus_volume.stdout }} \
+          --type=merge --patch='{"spec":{"numberOfReplicas":1}}'
+      args:
+        executable: /bin/bash
+      changed_when: true
+      when: prometheus_volume.stdout != ""
+
+    # ── Grafana volume ────────────────────────────────────────────────────────
+    - name: Discover Grafana volume name
+      ansible.builtin.shell: |
+        kubectl -n longhorn-system get volume -o name | grep pvc-f102a09b | head -1 | cut -d/ -f2
+      args:
+        executable: /bin/bash
+      register: grafana_volume
+      changed_when: false
+
+    - name: Scale Grafana volume to 2 replicas
+      ansible.builtin.shell: |
+        kubectl -n longhorn-system patch volume {{ grafana_volume.stdout }} \
+          --type=merge --patch='{"spec":{"numberOfReplicas":2}}'
+      args:
+        executable: /bin/bash
+      changed_when: true
+      when: grafana_volume.stdout != ""
+
+    - name: Wait for Grafana volume to be healthy with 2 replicas
+      ansible.builtin.shell: |
+        kubectl -n longhorn-system get volume {{ grafana_volume.stdout }} \
+          -o jsonpath='{.status.robustness}'
+      args:
+        executable: /bin/bash
+      register: graf_health
+      until: graf_health.stdout == "Healthy"
+      retries: 30
+      delay: 10
+      changed_when: false
+      when: grafana_volume.stdout != ""
+
+    - name: Scale Grafana volume to 1 replica (evicts eMMC replica)
+      ansible.builtin.shell: |
+        kubectl -n longhorn-system patch volume {{ grafana_volume.stdout }} \
+          --type=merge --patch='{"spec":{"numberOfReplicas":1}}'
+      args:
+        executable: /bin/bash
+      changed_when: true
+      when: grafana_volume.stdout != ""
+
+# ── Phase 5: Reinstall MinIO on NVMe-backed Longhorn ─────────────────────────
+- name: Reinstall MinIO with NVMe-backed storage
+  hosts: k8s_control
+  become: false
+  tags: [nvme-minio]
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+  tasks:
+    - name: Uninstall existing MinIO Helm release
+      ansible.builtin.command: helm uninstall minio -n minio
+      changed_when: true
+      ignore_errors: true
+
+    - name: Delete MinIO PVC
+      ansible.builtin.command: kubectl delete pvc minio -n minio --ignore-not-found
+      changed_when: true
+
+    - name: Delete MinIO namespace
+      ansible.builtin.command: kubectl delete namespace minio --ignore-not-found
+      changed_when: true
+
+    - name: Wait for MinIO namespace to terminate
+      ansible.builtin.shell: kubectl get namespace minio 2>/dev/null
+      args:
+        executable: /bin/bash
+      register: ns_check
+      until: ns_check.rc != 0
+      retries: 24
+      delay: 5
+      changed_when: false
+      failed_when: false
+
+    - name: Create MinIO namespace
+      ansible.builtin.shell: |
+        kubectl create namespace minio --dry-run=client -o yaml | kubectl apply -f -
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: Create MinIO credentials secret
+      ansible.builtin.shell: |
+        kubectl create secret generic minio-credentials \
+          --from-literal=rootUser=minioadmin \
+          --from-literal=rootPassword=minioadmin123 \
+          --namespace minio \
+          --dry-run=client -o yaml | kubectl apply -f -
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: Reinstall MinIO on NVMe-backed Longhorn
+      ansible.builtin.command: >
+        helm upgrade --install minio minio/minio
+        --namespace minio
+        --version {{ minio_version }}
+        --set mode=standalone
+        --set persistence.enabled=true
+        --set persistence.storageClass=longhorn
+        --set persistence.size={{ minio_storage_size }}
+        --set service.type=LoadBalancer
+        --set service.loadBalancerIP={{ minio_service_ip }}
+        --set existingSecret=minio-credentials
+        --no-hooks
+      changed_when: true
+
+    - name: Print MinIO summary
+      ansible.builtin.debug:
+        msg:
+          - "MinIO Console:  http://{{ minio_service_ip }}:9001"
+          - "MinIO API (S3): http://{{ minio_service_ip }}:9000"
+          - "Credentials:    minioadmin / minioadmin123"

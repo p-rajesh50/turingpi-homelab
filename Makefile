@@ -29,6 +29,7 @@ help:
 	@echo "    make common           Hardening, packages, NTP, firewall"
 	@echo "    make kubernetes       Deploy K8s cluster (control + workers)"
 	@echo "    make storage          Longhorn (NVMe) + NFS (SATA) + MinIO"
+	@echo "    make longhorn-nvme    Move Longhorn from eMMC to NVMe + migrate volumes"
 	@echo "    make addons           MetalLB, ingress, Prometheus, Grafana"
 	@echo "    make secrets          Store API keys in Kubernetes Secrets"
 	@echo "    make ai-stack         LiteLLM, Qdrant, JupyterHub, LangGraph, Prefect"
@@ -118,6 +119,11 @@ kubernetes:
 .PHONY: storage
 storage:
 	ansible-playbook ansible/playbooks/03-storage.yml \
+		-i $(INVENTORY) $(ANSIBLE_ARGS)
+
+.PHONY: longhorn-nvme
+longhorn-nvme:
+	ansible-playbook ansible/playbooks/03b-longhorn-nvme.yml \
 		-i $(INVENTORY) $(ANSIBLE_ARGS)
 
 .PHONY: addons

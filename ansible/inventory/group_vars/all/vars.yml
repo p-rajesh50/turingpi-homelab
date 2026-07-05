@@ -53,6 +53,10 @@ longhorn_version: "1.6.2"
 longhorn_replica_count: 2            # replicate across 2 of 3 nodes
 longhorn_storage_path: "/var/lib/longhorn"
 longhorn_nvme_device: "/dev/nvme0n1"
+longhorn_nvme_path: "/var/lib/longhorn-nvme"
+longhorn_nvme_label: "longhorn-nvme"
+longhorn_nvme_reserved: 10737418240  # 10 GiB reserved headroom on each NVMe
+longhorn_emmc_disk_name: "default-disk-c198b0f7bc4dffa4"
 
 # NFS (shared filesystem — SATA SSD on rk1-worker-1 / slot 3, pre-partitioned /dev/sda2)
 nfs_server_ip: "10.0.0.12"

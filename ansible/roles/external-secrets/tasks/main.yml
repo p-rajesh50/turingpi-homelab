@@ -28,6 +28,15 @@
     KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
   changed_when: true
 
+- name: Wait for External Secrets CRDs to be established
+  ansible.builtin.command: >
+    kubectl wait crd/clustersecretstores.external-secrets.io
+    --for=condition=Established
+    --timeout=120s
+  changed_when: false
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
 - name: Create Vault service account token for ESO
   ansible.builtin.copy:
     dest: /tmp/eso-vault-auth.yml
@@ -43,7 +52,7 @@
       ---
       # ClusterSecretStore — connects ESO to Vault
       # All namespaces can use this store
-      apiVersion: external-secrets.io/v1beta1
+      apiVersion: external-secrets.io/v1
       kind: ClusterSecretStore
       metadata:
         name: vault-backend
@@ -74,7 +83,7 @@
     content: |
       ---
       # LiteLLM — LLM API keys
-      apiVersion: external-secrets.io/v1beta1
+      apiVersion: external-secrets.io/v1
       kind: ExternalSecret
       metadata:
         name: llm-api-keys
@@ -102,7 +111,7 @@
               property: LITELLM_MASTER_KEY
       ---
       # MinIO credentials
-      apiVersion: external-secrets.io/v1beta1
+      apiVersion: external-secrets.io/v1
       kind: ExternalSecret
       metadata:
         name: minio-credentials
@@ -126,7 +135,7 @@
               property: rootPassword
       ---
       # Postgres credentials
-      apiVersion: external-secrets.io/v1beta1
+      apiVersion: external-secrets.io/v1
       kind: ExternalSecret
       metadata:
         name: postgres-credentials

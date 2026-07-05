@@ -115,7 +115,9 @@
               name: admin-user
               namespace: kubernetes-dashboard
         mode: "0644"
+      ignore_errors: true
 
     - name: Apply Dashboard admin user
       ansible.builtin.command: kubectl apply -f /tmp/dashboard-admin.yml
       changed_when: true
+      ignore_errors: true

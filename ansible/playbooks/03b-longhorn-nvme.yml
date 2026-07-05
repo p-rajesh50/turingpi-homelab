@@ -71,20 +71,20 @@
     KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
 
   tasks:
-    - name: Disable eMMC scheduling on rk1-worker-1
+    - name: Disable eMMC scheduling and request eviction on rk1-worker-1
       ansible.builtin.shell: |
         kubectl -n longhorn-system patch node.longhorn.io rk1-worker-1 \
           --type=merge \
-          --patch='{"spec":{"disks":{"{{ longhorn_emmc_disk_name }}":{"path":"/var/lib/longhorn","allowScheduling":false,"storageReserved":0}}}}'
+          --patch='{"spec":{"disks":{"{{ longhorn_emmc_disk_name }}":{"path":"/var/lib/longhorn","allowScheduling":false,"evictionRequested":true,"storageReserved":0}}}}'
       args:
         executable: /bin/bash
       changed_when: true
 
-    - name: Disable eMMC scheduling on rk1-worker-2
+    - name: Disable eMMC scheduling and request eviction on rk1-worker-2
       ansible.builtin.shell: |
         kubectl -n longhorn-system patch node.longhorn.io rk1-worker-2 \
           --type=merge \
-          --patch='{"spec":{"disks":{"{{ longhorn_emmc_disk_name }}":{"path":"/var/lib/longhorn","allowScheduling":false,"storageReserved":0}}}}'
+          --patch='{"spec":{"disks":{"{{ longhorn_emmc_disk_name }}":{"path":"/var/lib/longhorn","allowScheduling":false,"evictionRequested":true,"storageReserved":0}}}}'
       args:
         executable: /bin/bash
       changed_when: true
@@ -98,8 +98,10 @@
         executable: /bin/bash
       changed_when: true
 
-# ── Phase 4: Migrate existing eMMC volumes to NVMe ───────────────────────────
-- name: Migrate Prometheus and Grafana volumes to NVMe
+# ── Phase 4: Wait for eMMC eviction to complete ───────────────────────────────
+# Phase 3 sets evictionRequested: true on both eMMC disks. Longhorn migrates
+# existing replicas to NVMe automatically. This phase polls until none remain.
+- name: Wait for eMMC replica eviction
   hosts: k8s_control
   become: false
   tags: [nvme-migrate]
@@ -107,85 +109,18 @@
     KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
 
   tasks:
-    # ── Prometheus volume ─────────────────────────────────────────────────────
-    - name: Discover Prometheus volume name
+    - name: Poll until all replicas have left eMMC disks
       ansible.builtin.shell: |
-        kubectl -n longhorn-system get volume -o name | grep pvc-02365a2e | head -1 | cut -d/ -f2
+        kubectl -n longhorn-system get replicas \
+          -o jsonpath='{range .items[*]}{.spec.diskPath}{"\n"}{end}' \
+          | grep -q '^{{ longhorn_storage_path }}$'; echo $?
       args:
         executable: /bin/bash
-      register: prometheus_volume
-      changed_when: false
-
-    - name: Scale Prometheus volume to 2 replicas
-      ansible.builtin.shell: |
-        kubectl -n longhorn-system patch volume {{ prometheus_volume.stdout }} \
-          --type=merge --patch='{"spec":{"numberOfReplicas":2}}'
-      args:
-        executable: /bin/bash
-      changed_when: true
-      when: prometheus_volume.stdout != ""
-
-    - name: Wait for Prometheus volume to be healthy with 2 replicas
-      ansible.builtin.shell: |
-        kubectl -n longhorn-system get volume {{ prometheus_volume.stdout }} \
-          -o jsonpath='{.status.robustness}'
-      args:
-        executable: /bin/bash
-      register: prom_health
-      until: prom_health.stdout == "Healthy"
-      retries: 30
+      register: emmc_check
+      until: emmc_check.stdout == "1"
+      retries: 60
       delay: 10
       changed_when: false
-      when: prometheus_volume.stdout != ""
-
-    - name: Scale Prometheus volume to 1 replica (evicts eMMC replica)
-      ansible.builtin.shell: |
-        kubectl -n longhorn-system patch volume {{ prometheus_volume.stdout }} \
-          --type=merge --patch='{"spec":{"numberOfReplicas":1}}'
-      args:
-        executable: /bin/bash
-      changed_when: true
-      when: prometheus_volume.stdout != ""
-
-    # ── Grafana volume ────────────────────────────────────────────────────────
-    - name: Discover Grafana volume name
-      ansible.builtin.shell: |
-        kubectl -n longhorn-system get volume -o name | grep pvc-f102a09b | head -1 | cut -d/ -f2
-      args:
-        executable: /bin/bash
-      register: grafana_volume
-      changed_when: false
-
-    - name: Scale Grafana volume to 2 replicas
-      ansible.builtin.shell: |
-        kubectl -n longhorn-system patch volume {{ grafana_volume.stdout }} \
-          --type=merge --patch='{"spec":{"numberOfReplicas":2}}'
-      args:
-        executable: /bin/bash
-      changed_when: true
-      when: grafana_volume.stdout != ""
-
-    - name: Wait for Grafana volume to be healthy with 2 replicas
-      ansible.builtin.shell: |
-        kubectl -n longhorn-system get volume {{ grafana_volume.stdout }} \
-          -o jsonpath='{.status.robustness}'
-      args:
-        executable: /bin/bash
-      register: graf_health
-      until: graf_health.stdout == "Healthy"
-      retries: 30
-      delay: 10
-      changed_when: false
-      when: grafana_volume.stdout != ""
-
-    - name: Scale Grafana volume to 1 replica (evicts eMMC replica)
-      ansible.builtin.shell: |
-        kubectl -n longhorn-system patch volume {{ grafana_volume.stdout }} \
-          --type=merge --patch='{"spec":{"numberOfReplicas":1}}'
-      args:
-        executable: /bin/bash
-      changed_when: true
-      when: grafana_volume.stdout != ""
 
 # ── Phase 5: Reinstall MinIO on NVMe-backed Longhorn ─────────────────────────
 - name: Reinstall MinIO with NVMe-backed storage

@@ -16,7 +16,7 @@
         - { name: metallb,              url: "https://metallb.github.io/metallb" }
         - { name: ingress-nginx,        url: "https://kubernetes.github.io/ingress-nginx" }
         - { name: prometheus-community, url: "https://prometheus-community.github.io/helm-charts" }
-        - { name: headlamp,             url: "https://headlamp-k8s.github.io/headlamp/" }
+        - { name: headlamp,             url: "https://kubernetes-sigs.github.io/headlamp/" }
         - { name: portainer,            url: "https://portainer.github.io/k8s/" }
 
     - name: Update Helm repos
@@ -90,11 +90,13 @@
       changed_when: true
 
     # ── Portainer ─────────────────────────────────────────────────────────────
+    # Note: the portainer/portainer chart has no service.loadBalancerIP values
+    # key — MetalLB IP is pinned via the metallb.io/loadBalancerIPs annotation.
     - name: Install Portainer
       ansible.builtin.command: >
         helm upgrade --install portainer portainer/portainer
         --namespace portainer --create-namespace
         --set service.type=LoadBalancer
-        --set service.loadBalancerIP={{ portainer_service_ip }}
+        --set service.annotations."metallb\.io/loadBalancerIPs"={{ portainer_service_ip }}
         --wait --timeout 10m
       changed_when: true

@@ -82,6 +82,7 @@ agentic app runtime, secrets management, and remote access.
 5. ✅ Cluster 1 — Common hardening (UFW, fail2ban, NTP, packages)
 6. ✅ Cluster 1 — Kubernetes cluster
 7. ✅ Cluster 1 — Storage (Longhorn + NFS + MinIO)
+7b. ✅ Cluster 1 — Longhorn NVMe migration (eMMC evicted, all replicas on NVMe)
 8. ✅ Cluster 1 — Cluster add-ons (MetalLB, ingress, Prometheus)
 9. ⬜ Cluster 1 — Vault + External Secrets Operator                   ← NEXT STEP
 10. ⬜ Cluster 1 — Secrets setup (API keys into Vault)
@@ -217,7 +218,7 @@ tpi --host $BMC_IP --user $BMC_USER --password $BMC_PASSWORD power off --node 1
 
 | Storage | Device | Mount | StorageClass | Used For |
 |---|---|---|---|---|
-| Longhorn | /dev/nvme0n1 on rk1-worker-1 + rk1-worker-2 | /var/lib/longhorn | longhorn (default) | Databases, stateful apps — replicated |
+| Longhorn | /dev/nvme0n1 on rk1-worker-1 + rk1-worker-2 | /var/lib/longhorn-nvme | longhorn (default) | Databases, stateful apps — replicated |
 | NFS | /dev/sda2 on rk1-worker-1 (slot 3, 476.4G) | /mnt/sata → /mnt/sata/k8s | nfs-shared | Shared files, ML models, artifacts |
 | MinIO | Longhorn PVC 200Gi | — | — | S3-compatible object storage |
 
@@ -389,9 +390,10 @@ As of the last session:
 - Repo pushed to github.com/p-rajesh50/turingpi-homelab
 - Kubernetes 1.30.14 cluster deployed (3 nodes Ready, Flannel CNI)
 - kubeconfig at ~/.kube/turingpi-cluster1.conf
-- Storage: Longhorn (NVMe, 2 nodes), NFS /dev/sda2 on rk1-worker-1, MinIO at 10.0.0.35
+- Storage: Longhorn (NVMe /var/lib/longhorn-nvme, 2 nodes, eMMC disabled+evicted), NFS /dev/sda2 on rk1-worker-1, MinIO at 10.0.0.35
 - Addons: MetalLB (10.0.0.30-49), ingress-nginx (10.0.0.30), Grafana (10.0.0.37)
 - Note: rk1-worker-2 /swapfile caused kubelet failure — fixed manually + hardened in 02-kubernetes.yml
+- Longhorn disk key: nvme-disk → /var/lib/longhorn-nvme; eMMC key: default-disk-c198b0f7bc4dffa4 (allowScheduling: false, evictionRequested: true)
 
 **Next immediate step:**
 ```bash

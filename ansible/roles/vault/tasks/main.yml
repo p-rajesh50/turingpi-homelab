@@ -10,30 +10,22 @@
   ansible.builtin.command: helm repo add hashicorp https://helm.releases.hashicorp.com
   changed_when: true
   environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
 
 - name: Update Helm repos
   ansible.builtin.command: helm repo update
   changed_when: true
   environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
 
 - name: Create vault namespace
-  ansible.builtin.command: >
+  ansible.builtin.shell: |
     kubectl create namespace vault --dry-run=client -o yaml | kubectl apply -f -
+  args:
+    executable: /bin/bash
   changed_when: true
   environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-
-- name: Deploy Vault via Helm
-  ansible.builtin.command: >
-    helm upgrade --install vault hashicorp/vault
-    --namespace vault
-    --values /tmp/vault-values.yml
-    --wait --timeout 10m
-  environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
-  changed_when: true
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
 
 - name: Write Vault Helm values
   ansible.builtin.copy:
@@ -98,6 +90,16 @@
           limits:
             memory: 128Mi
 
+- name: Deploy Vault via Helm
+  ansible.builtin.command: >
+    helm upgrade --install vault hashicorp/vault
+    --namespace vault
+    --values /tmp/vault-values.yml
+    --wait --timeout 10m
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  changed_when: true
+
 - name: Wait for Vault pod to be ready
   ansible.builtin.command: >
     kubectl wait pod/vault-0
@@ -105,14 +107,14 @@
     --namespace vault
     --timeout=300s
   environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
   changed_when: false
 
 - name: Check if Vault is already initialized
   ansible.builtin.command: >
     kubectl exec vault-0 -n vault -- vault status -format=json
   environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
   register: vault_status
   changed_when: false
   failed_when: false
@@ -125,14 +127,14 @@
     -key-threshold=3
     -format=json
   environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
   register: vault_init
-  when: "'Initialized' not in vault_status.stdout or 'false' in vault_status.stdout"
+  when: vault_status.rc == 2
   changed_when: true
 
 - name: Save Vault unseal keys and root token
   ansible.builtin.copy:
-    dest: "{{ ansible_env.HOME }}/.vault-init.json"
+    dest: "{{ lookup('env', 'HOME') }}/.vault-init.json"
     content: "{{ vault_init.stdout }}"
     mode: "0600"
   when: vault_init is changed
@@ -153,17 +155,18 @@
 
 - name: Unseal Vault using saved keys
   ansible.builtin.shell: |
-    KEYS=$(cat {{ ansible_env.HOME }}/.vault-init.json | python3 -c "
-    import sys, json
-    data = json.load(sys.stdin)
-    keys = data['unseal_keys_b64']
-    print('\n'.join(keys[:3]))
+    KEYS=$(python3 -c "
+    import json
+    data = json.load(open('{{ lookup('env', 'HOME') }}/.vault-init.json'))
+    print('\n'.join(data['unseal_keys_b64'][:3]))
     ")
     for key in $KEYS; do
       kubectl exec vault-0 -n vault -- vault operator unseal $key
     done
+  args:
+    executable: /bin/bash
   environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
+    KUBECONFIG: "{{ lookup('env', 'HOME') }}/.kube/turingpi-cluster1.conf"
   delegate_to: localhost
   become: false
   when: vault_init is changed
@@ -171,8 +174,10 @@
 
 - name: Enable Kubernetes auth method in Vault
   ansible.builtin.shell: |
-    ROOT_TOKEN=$(cat {{ ansible_env.HOME }}/.vault-init.json | \
-      python3 -c "import sys,json; print(json.load(sys.stdin)['root_token'])")
+    ROOT_TOKEN=$(python3 -c "
+    import json
+    print(json.load(open('{{ lookup('env', 'HOME') }}/.vault-init.json'))['root_token'])
+    ")
 
     kubectl exec vault-0 -n vault -- \
       vault login $ROOT_TOKEN
@@ -187,8 +192,10 @@
     # Enable KV v2 secrets engine
     kubectl exec vault-0 -n vault -- \
       vault secrets enable -path=secret kv-v2 || true
+  args:
+    executable: /bin/bash
   environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
+    KUBECONFIG: "{{ lookup('env', 'HOME') }}/.kube/turingpi-cluster1.conf"
   delegate_to: localhost
   become: false
   when: vault_init is changed
@@ -196,8 +203,10 @@
 
 - name: Create Vault policies for each service
   ansible.builtin.shell: |
-    ROOT_TOKEN=$(cat {{ ansible_env.HOME }}/.vault-init.json | \
-      python3 -c "import sys,json; print(json.load(sys.stdin)['root_token'])")
+    ROOT_TOKEN=$(python3 -c "
+    import json
+    print(json.load(open('{{ lookup('env', 'HOME') }}/.vault-init.json'))['root_token'])
+    ")
 
     # LiteLLM policy — can only read LLM API keys
     kubectl exec vault-0 -n vault -- sh -c "
@@ -222,8 +231,10 @@
       capabilities = [\"create\", \"read\", \"update\", \"delete\", \"list\"]
     }
     EOF"
+  args:
+    executable: /bin/bash
   environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
+    KUBECONFIG: "{{ lookup('env', 'HOME') }}/.kube/turingpi-cluster1.conf"
   delegate_to: localhost
   become: false
   when: vault_init is changed

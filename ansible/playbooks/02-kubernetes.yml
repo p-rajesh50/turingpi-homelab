@@ -19,6 +19,13 @@
         regexp: '^([^#].*\s+swap\s+.*)$'
         replace: '# \1'
 
+    - name: Remove swapfile if present
+      ansible.builtin.shell: |
+        swapoff -a
+        rm -f /swapfile
+        sed -i '/swapfile/d' /etc/fstab
+      changed_when: false
+
     - name: Load kernel modules
       community.general.modprobe:
         name: "{{ item }}"
@@ -70,6 +77,12 @@
         name: containerd
         enabled: true
         state: restarted
+
+    - name: Create apt keyrings directory
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
 
     - name: Add Kubernetes apt key
       ansible.builtin.get_url:
@@ -133,5 +146,5 @@
         kubectl apply -f
         https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
       environment:
-        KUBECONFIG: /etc/kubernetes/admin.conf
+        KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
       changed_when: true

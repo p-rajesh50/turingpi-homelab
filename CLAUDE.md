@@ -82,8 +82,8 @@ agentic app runtime, secrets management, and remote access.
 5. ✅ Cluster 1 — Common hardening (UFW, fail2ban, NTP, packages)
 6. ✅ Cluster 1 — Kubernetes cluster
 7. ✅ Cluster 1 — Storage (Longhorn + NFS + MinIO)
-8. ⬜ Cluster 1 — Cluster add-ons (MetalLB, ingress, Prometheus)     ← NEXT STEP
-9. ⬜ Cluster 1 — Vault + External Secrets Operator
+8. ✅ Cluster 1 — Cluster add-ons (MetalLB, ingress, Prometheus)
+9. ⬜ Cluster 1 — Vault + External Secrets Operator                   ← NEXT STEP
 10. ⬜ Cluster 1 — Secrets setup (API keys into Vault)
 11. ⬜ Cluster 1 — AI stack (LiteLLM, Qdrant, JupyterHub, LangGraph, Prefect)
 12. ⬜ Cluster 1 — Developer tools (Gitea + CI/CD)
@@ -389,10 +389,13 @@ As of the last session:
 - Repo pushed to github.com/p-rajesh50/turingpi-homelab
 - Kubernetes 1.30.14 cluster deployed (3 nodes Ready, Flannel CNI)
 - kubeconfig at ~/.kube/turingpi-cluster1.conf
+- Storage: Longhorn (NVMe, 2 nodes), NFS /dev/sda2 on rk1-worker-1, MinIO at 10.0.0.35
+- Addons: MetalLB (10.0.0.30-49), ingress-nginx (10.0.0.30), Grafana (10.0.0.37)
+- Note: rk1-worker-2 /swapfile caused kubelet failure — fixed manually + hardened in 02-kubernetes.yml
 
 **Next immediate step:**
 ```bash
-make storage
+make vault
 ```
 
 ---

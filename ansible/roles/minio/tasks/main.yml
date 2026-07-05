@@ -12,7 +12,9 @@
     KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
 
 - name: Create MinIO namespace
-  ansible.builtin.command: kubectl create namespace minio --dry-run=client -o yaml | kubectl apply -f -
+  ansible.builtin.shell: kubectl create namespace minio --dry-run=client -o yaml | kubectl apply -f -
+  args:
+    executable: /bin/bash
   changed_when: true
   environment:
     KUBECONFIG: "/home/{{ admin_user }}/.kube/config"

@@ -84,8 +84,8 @@ agentic app runtime, secrets management, and remote access.
 7. ✅ Cluster 1 — Storage (Longhorn + NFS + MinIO)
 7b. ✅ Cluster 1 — Longhorn NVMe migration (eMMC evicted, all replicas on NVMe)
 8. ✅ Cluster 1 — Cluster add-ons (MetalLB, ingress, Prometheus)
-9. ⬜ Cluster 1 — Vault + External Secrets Operator                   ← NEXT STEP
-10. ⬜ Cluster 1 — Secrets setup (API keys into Vault)
+9. ✅ Cluster 1 — Vault + External Secrets Operator
+10. ⬜ Cluster 1 — Secrets setup (API keys into Vault)                ← NEXT STEP
 11. ⬜ Cluster 1 — AI stack (LiteLLM, Qdrant, JupyterHub, LangGraph, Prefect)
 12. ⬜ Cluster 1 — Developer tools (Gitea + CI/CD)
 13. ⬜ Cluster 1 — Tailscale (remote access)
@@ -394,6 +394,9 @@ As of the last session:
 - Addons: MetalLB (10.0.0.30-49), ingress-nginx (10.0.0.30), Grafana (10.0.0.37)
 - Note: rk1-worker-2 /swapfile caused kubelet failure — fixed manually + hardened in 02-kubernetes.yml
 - Longhorn disk key: nvme-disk → /var/lib/longhorn-nvme; eMMC key: default-disk-c198b0f7bc4dffa4 (allowScheduling: false, evictionRequested: true)
+- Vault 2.0.3: initialized (5 shares, threshold 3), unsealed, KV-v2 at secret/, K8s auth enabled
+- ESO: ClusterSecretStore vault-backend Valid+Ready; minio ExternalSecret pending (needs make secrets)
+- ~/.vault-init.json on WSL controller — 5 unseal keys + root token — BACK THIS UP
 
 **Next immediate step:**
 ```bash

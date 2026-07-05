@@ -190,7 +190,7 @@ nfs_server_ip: "10.0.0.12"
 nfs_export_path: "/mnt/sata/k8s"
 nfs_sata_device: "/dev/sda2"
 ollama_port: 11434
-litellm_service_ip: "10.0.0.30"
+litellm_service_ip: "10.0.0.40"
 ```
 
 ### SSH Access
@@ -230,7 +230,7 @@ tpi --host $BMC_IP --user $BMC_USER --password $BMC_PASSWORD power off --node 1
 Your apps / agents / notebooks
         │
         ▼ OpenAI-compatible API
-LiteLLM Gateway (http://10.0.0.30/v1)
+LiteLLM Gateway (http://10.0.0.40/v1)
         │
         ├── model="gemma3"     → Orin NX Ollama (10.0.0.14:11434) — free, local
         ├── model="mistral"    → Orin NX Ollama
@@ -414,7 +414,7 @@ make vault
 from anthropic import Anthropic
 
 client = Anthropic(
-    base_url="http://10.0.0.30/v1",   # LiteLLM gateway
+    base_url="http://10.0.0.40/v1",   # LiteLLM gateway
     api_key="your-litellm-master-key"
 )
 
@@ -426,7 +426,7 @@ agent = Agent(
     name="homelab-agent",
     model=LiteLlm(
         model="claude-sonnet",          # or "gemma3" for local/free
-        api_base="http://10.0.0.30/v1"
+        api_base="http://10.0.0.40/v1"
     ),
     tools=[postgres_tool, qdrant_tool, web_search_tool]
 )

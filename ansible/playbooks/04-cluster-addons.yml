@@ -16,7 +16,12 @@
         - { name: metallb,              url: "https://metallb.github.io/metallb" }
         - { name: ingress-nginx,        url: "https://kubernetes.github.io/ingress-nginx" }
         - { name: prometheus-community, url: "https://prometheus-community.github.io/helm-charts" }
-        - { name: kubernetes-dashboard, url: "https://kubernetes.github.io/dashboard/" }
+
+    - name: Add Kubernetes Dashboard Helm repo
+      ansible.builtin.command: >
+        helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/
+      changed_when: true
+      ignore_errors: true
 
     - name: Update Helm repos
       ansible.builtin.command: helm repo update
@@ -84,6 +89,7 @@
         helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard
         --namespace kubernetes-dashboard --create-namespace --wait
       changed_when: true
+      ignore_errors: true
 
     - name: Create Dashboard admin user
       ansible.builtin.copy:

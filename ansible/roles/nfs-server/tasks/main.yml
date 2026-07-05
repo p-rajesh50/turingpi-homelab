@@ -1,6 +1,7 @@
 ---
 # Only runs on the node with nfs_server: true (rk1-worker-1, slot 3)
-# /dev/sda2 is a pre-existing 476.4G partition on the SATA SSD — no partitioning needed
+# /dev/sda2 is a pre-existing ext4 partition (476.4G, labelled "rootfs" from old OS install)
+# No partitioning or formatting needed — mount, wipe old OS content, then export via NFS
 
 - name: Skip if not NFS server
   ansible.builtin.meta: end_host
@@ -10,17 +11,6 @@
   ansible.builtin.apt:
     name: [nfs-kernel-server, e2fsprogs]
     state: present
-
-- name: Check filesystem type on SATA partition
-  ansible.builtin.command: "blkid -s TYPE -o value {{ nfs_sata_device }}"
-  register: blkid_result
-  changed_when: false
-  failed_when: false
-
-- name: Format SATA partition as ext4 (only if not already ext4)
-  ansible.builtin.command: "mkfs.ext4 -F {{ nfs_sata_device }}"
-  when: blkid_result.stdout | trim != 'ext4'
-  changed_when: true
 
 - name: Create SATA mount point
   ansible.builtin.file:
@@ -35,6 +25,18 @@
     fstype: ext4
     opts: defaults,noatime
     state: mounted
+
+- name: Relabel partition from rootfs to nfs-storage
+  ansible.builtin.command: "e2label {{ nfs_sata_device }} nfs-storage"
+  changed_when: true
+
+- name: Remove old OS content (preserve k8s export dir if it exists)
+  ansible.builtin.shell: >
+    find {{ nfs_sata_mount }} -mindepth 1 -maxdepth 1
+    ! -name 'k8s' -exec rm -rf {} +
+  args:
+    executable: /bin/bash
+  changed_when: true
 
 - name: Create NFS export directory on SATA
   ansible.builtin.file:

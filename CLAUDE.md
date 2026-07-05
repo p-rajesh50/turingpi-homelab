@@ -81,8 +81,8 @@ agentic app runtime, secrets management, and remote access.
 4. ✅ Cluster 1 — Bootstrap (SSH keys, hostnames, static IPs)
 5. ✅ Cluster 1 — Common hardening (UFW, fail2ban, NTP, packages)
 6. ✅ Cluster 1 — Kubernetes cluster
-7. ⬜ Cluster 1 — Storage (Longhorn + NFS + MinIO)     ← NEXT STEP
-8. ⬜ Cluster 1 — Cluster add-ons (MetalLB, ingress, Prometheus)
+7. ✅ Cluster 1 — Storage (Longhorn + NFS + MinIO)
+8. ⬜ Cluster 1 — Cluster add-ons (MetalLB, ingress, Prometheus)     ← NEXT STEP
 9. ⬜ Cluster 1 — Vault + External Secrets Operator
 10. ⬜ Cluster 1 — Secrets setup (API keys into Vault)
 11. ⬜ Cluster 1 — AI stack (LiteLLM, Qdrant, JupyterHub, LangGraph, Prefect)

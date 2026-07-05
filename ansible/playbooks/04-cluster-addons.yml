@@ -6,7 +6,7 @@
   hosts: k8s_control
   become: false
   environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
 
   tasks:
     - name: Add required Helm repos
@@ -60,16 +60,22 @@
         helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx
         --namespace ingress-nginx --create-namespace
         --set controller.service.type=LoadBalancer
-        --wait
+        --wait --timeout 10m
       changed_when: true
 
     # ── Prometheus + Grafana ──────────────────────────────────────────────────
+    - name: Copy Prometheus Helm values to control plane
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../kubernetes/helm-values/prometheus-stack.yml"
+        dest: /tmp/prometheus-stack.yml
+        mode: "0644"
+
     - name: Install kube-prometheus-stack
       ansible.builtin.command: >
         helm upgrade --install monitoring prometheus-community/kube-prometheus-stack
         --namespace monitoring --create-namespace
-        --values {{ playbook_dir }}/../kubernetes/helm-values/prometheus-stack.yml
-        --wait
+        --values /tmp/prometheus-stack.yml
+        --wait --timeout 10m
       changed_when: true
 
     # ── Kubernetes Dashboard ──────────────────────────────────────────────────

@@ -1,9 +1,8 @@
 ---
-# ansible/playbooks/01-common.yml
-# Hardening, packages, NTP, UFW, fail2ban on all RK1 nodes.
-
 - name: Common baseline — all RK1 nodes
   hosts: rk1_nodes
   become: true
+  vars_files:
+    - ../group_vars/all/vars.yml
   roles:
     - role: common

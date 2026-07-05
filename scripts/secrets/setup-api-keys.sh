@@ -6,6 +6,7 @@
 set -euo pipefail
 
 export KUBECONFIG="${KUBECONFIG:-$HOME/.kube/turingpi-cluster1.conf}"
+export PATH="$PATH:$HOME/bin"
 
 GREEN='\033[0;32m'; BLUE='\033[0;34m'; YELLOW='\033[1;33m'; NC='\033[0m'
 info()    { echo -e "${BLUE}→${NC} $*"; }

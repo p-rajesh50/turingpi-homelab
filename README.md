@@ -1,4 +1,4 @@
-# TuringPi Homelab — p-rajesh50
+# TuringPi Homelab
 
 Fully automated homelab cluster built on TuringPi 2.5 (Cluster 1) and TuringPi 2 (Cluster 2),
 with Kubernetes, local LLM inference, AI gateway, agentic app runtime, and full MLOps stack.

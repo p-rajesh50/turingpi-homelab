@@ -33,7 +33,7 @@
 
 - name: Fetch kubeconfig to workstation
   ansible.builtin.fetch:
-    src: /etc/kubernetes/admin.conf
+    src: "/home/{{ admin_user }}/.kube/config"
     dest: "~/.kube/turingpi-cluster1.conf"
     flat: true
   become: false

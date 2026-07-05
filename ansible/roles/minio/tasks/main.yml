@@ -42,6 +42,7 @@
     --set service.type=LoadBalancer
     --set service.loadBalancerIP={{ minio_service_ip }}
     --set existingSecret=minio-credentials
+    --no-hooks
   environment:
     KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
   changed_when: true

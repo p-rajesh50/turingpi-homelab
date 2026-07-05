@@ -1,6 +1,6 @@
 ---
 # ansible/playbooks/04-cluster-addons.yml
-# MetalLB, Ingress-NGINX, Prometheus+Grafana, Kubernetes Dashboard
+# MetalLB, Ingress-NGINX, Prometheus+Grafana, Headlamp, Portainer
 
 - name: Deploy cluster networking and monitoring add-ons
   hosts: k8s_control
@@ -16,12 +16,8 @@
         - { name: metallb,              url: "https://metallb.github.io/metallb" }
         - { name: ingress-nginx,        url: "https://kubernetes.github.io/ingress-nginx" }
         - { name: prometheus-community, url: "https://prometheus-community.github.io/helm-charts" }
-
-    - name: Add Kubernetes Dashboard Helm repo
-      ansible.builtin.command: >
-        helm repo add kubernetes-dashboard https://kubernetes.github.io/dashboard/
-      changed_when: true
-      ignore_errors: true
+        - { name: headlamp,             url: "https://headlamp-k8s.github.io/headlamp/" }
+        - { name: portainer,            url: "https://portainer.github.io/k8s/" }
 
     - name: Update Helm repos
       ansible.builtin.command: helm repo update
@@ -83,41 +79,22 @@
         --wait --timeout 10m
       changed_when: true
 
-    # ── Kubernetes Dashboard ──────────────────────────────────────────────────
-    - name: Install Kubernetes Dashboard
+    # ── Headlamp ──────────────────────────────────────────────────────────────
+    - name: Install Headlamp
       ansible.builtin.command: >
-        helm upgrade --install kubernetes-dashboard kubernetes-dashboard/kubernetes-dashboard
-        --namespace kubernetes-dashboard --create-namespace --wait
+        helm upgrade --install headlamp headlamp/headlamp
+        --namespace headlamp --create-namespace
+        --set service.type=LoadBalancer
+        --set service.loadBalancerIP={{ headlamp_service_ip }}
+        --wait --timeout 10m
       changed_when: true
-      ignore_errors: true
 
-    - name: Create Dashboard admin user
-      ansible.builtin.copy:
-        dest: /tmp/dashboard-admin.yml
-        content: |
-          ---
-          apiVersion: v1
-          kind: ServiceAccount
-          metadata:
-            name: admin-user
-            namespace: kubernetes-dashboard
-          ---
-          apiVersion: rbac.authorization.k8s.io/v1
-          kind: ClusterRoleBinding
-          metadata:
-            name: admin-user
-          roleRef:
-            apiGroup: rbac.authorization.k8s.io
-            kind: ClusterRole
-            name: cluster-admin
-          subjects:
-            - kind: ServiceAccount
-              name: admin-user
-              namespace: kubernetes-dashboard
-        mode: "0644"
-      ignore_errors: true
-
-    - name: Apply Dashboard admin user
-      ansible.builtin.command: kubectl apply -f /tmp/dashboard-admin.yml
+    # ── Portainer ─────────────────────────────────────────────────────────────
+    - name: Install Portainer
+      ansible.builtin.command: >
+        helm upgrade --install portainer portainer/portainer
+        --namespace portainer --create-namespace
+        --set service.type=LoadBalancer
+        --set service.loadBalancerIP={{ portainer_service_ip }}
+        --wait --timeout 10m
       changed_when: true
-      ignore_errors: true

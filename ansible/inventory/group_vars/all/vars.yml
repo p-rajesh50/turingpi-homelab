@@ -121,6 +121,10 @@ grafana_service_ip: "10.0.0.37"     # from MetalLB pool
 prometheus_retention: "15d"
 prometheus_storage_size: "20Gi"
 
+# ── Cluster UIs ───────────────────────────────────────────────────────────────
+headlamp_service_ip: "10.0.0.38"    # from MetalLB pool
+portainer_service_ip: "10.0.0.39"   # from MetalLB pool
+
 # ── Common packages (installed on every node) ─────────────────────────────────
 common_packages:
   - curl

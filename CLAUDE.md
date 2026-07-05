@@ -277,6 +277,8 @@ https://llm.kloud-worx.com        Open WebUI (chat with local models)
 https://litellm.kloud-worx.com    LiteLLM API gateway
 https://minio.kloud-worx.com      MinIO S3 console
 https://prefect.kloud-worx.com    Prefect orchestration UI
+https://headlamp.kloud-worx.com   Headlamp K8s UI
+https://portainer.kloud-worx.com  Portainer multi-cluster UI
 https://truenas.kloud-worx.com    TrueNAS admin (future)
 ```
 

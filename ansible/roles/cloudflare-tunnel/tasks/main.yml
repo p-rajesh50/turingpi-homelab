@@ -12,6 +12,8 @@
 #   llm.kloud-worx.com        → Open WebUI (chat with local models)
 #   litellm.kloud-worx.com    → LiteLLM API gateway
 #   minio.kloud-worx.com      → MinIO S3 console
+#   headlamp.kloud-worx.com   → Headlamp K8s UI
+#   portainer.kloud-worx.com  → Portainer multi-cluster UI
 #
 # PREREQUISITE: Cloudflare tunnel token stored in Vault:
 #   vault kv put secret/cloudflare \
@@ -25,7 +27,7 @@
     kubectl create namespace cloudflare-tunnel --dry-run=client -o yaml | kubectl apply -f -
   changed_when: true
   environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
 
 - name: Deploy cloudflared tunnel config
   ansible.builtin.copy:
@@ -78,6 +80,14 @@
             # Prefect orchestration UI
             - hostname: prefect.kloud-worx.com
               service: http://prefect-server.prefect.svc.cluster.local:4200
+
+            # Headlamp Kubernetes UI
+            - hostname: headlamp.kloud-worx.com
+              service: http://headlamp.headlamp.svc.cluster.local:80
+
+            # Portainer multi-cluster UI
+            - hostname: portainer.kloud-worx.com
+              service: http://portainer.portainer.svc.cluster.local:9000
 
             # Catch-all
             - service: http_status:404
@@ -138,7 +148,7 @@
   ansible.builtin.command: kubectl apply -f /tmp/cloudflared.yml
   changed_when: true
   environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
 
 - name: Print Cloudflare Tunnel summary
   ansible.builtin.debug:
@@ -152,4 +162,6 @@
       - "  https://litellm.kloud-worx.com    ← LiteLLM API"
       - "  https://minio.kloud-worx.com      ← MinIO Console"
       - "  https://prefect.kloud-worx.com    ← Prefect UI"
+      - "  https://headlamp.kloud-worx.com   ← Headlamp K8s UI"
+      - "  https://portainer.kloud-worx.com  ← Portainer multi-cluster UI"
       - "All protected by Cloudflare Access (Google OAuth login required)"

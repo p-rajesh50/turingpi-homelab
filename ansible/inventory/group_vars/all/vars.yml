@@ -56,7 +56,7 @@ longhorn_nvme_device: "/dev/nvme0n1"
 
 # NFS (shared filesystem — SATA SSD on rk1-worker-2 / slot 4)
 nfs_server_ip: "10.0.0.13"
-nfs_export_path: "/srv/nfs/k8s"
+nfs_export_path: "/mnt/sata/k8s"
 nfs_sata_device: "/dev/sda"
 nfs_sata_mount: "/mnt/sata"
 

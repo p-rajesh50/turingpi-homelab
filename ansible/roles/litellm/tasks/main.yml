@@ -4,10 +4,12 @@
 # Create keys with: make secrets   or   scripts/secrets/setup-api-keys.sh
 
 - name: Create litellm namespace
-  ansible.builtin.command: kubectl create namespace litellm --dry-run=client -o yaml | kubectl apply -f -
+  ansible.builtin.shell: kubectl create namespace litellm --dry-run=client -o yaml | kubectl apply -f -
+  args:
+    executable: /bin/bash
   changed_when: true
   environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
 
 - name: Deploy LiteLLM config map
   ansible.builtin.copy:
@@ -87,7 +89,7 @@
   ansible.builtin.command: kubectl apply -f /tmp/litellm-config.yml
   changed_when: true
   environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
 
 - name: Deploy LiteLLM Deployment and Service
   ansible.builtin.copy:
@@ -141,7 +143,7 @@
         name: litellm
         namespace: litellm
         annotations:
-          metallb.universe.tf/loadBalancerIPs: "{{ litellm_service_ip }}"
+          metallb.io/loadBalancerIPs: "{{ litellm_service_ip }}"
       spec:
         type: LoadBalancer
         selector:
@@ -155,7 +157,7 @@
   ansible.builtin.command: kubectl apply -f /tmp/litellm-deploy.yml
   changed_when: true
   environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
 
 - name: Print LiteLLM summary
   ansible.builtin.debug:

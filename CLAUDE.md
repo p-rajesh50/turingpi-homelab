@@ -85,8 +85,8 @@ agentic app runtime, secrets management, and remote access.
 7b. ✅ Cluster 1 — Longhorn NVMe migration (eMMC evicted, all replicas on NVMe)
 8. ✅ Cluster 1 — Cluster add-ons (MetalLB, ingress, Prometheus)
 9. ✅ Cluster 1 — Vault + External Secrets Operator
-10. ⬜ Cluster 1 — Secrets setup (API keys into Vault)                ← NEXT STEP
-11. ⬜ Cluster 1 — AI stack (LiteLLM, Qdrant, JupyterHub, LangGraph, Prefect)
+10. ✅ Cluster 1 — Secrets setup (API keys into Vault)
+11. ⬜ Cluster 1 — AI stack (LiteLLM, Qdrant, JupyterHub, LangGraph, Prefect)   ← NEXT STEP
 12. ⬜ Cluster 1 — Developer tools (Gitea + CI/CD)
 13. ⬜ Cluster 1 — Tailscale (remote access)
 14. ⬜ Cluster 1 — Cloudflare Tunnel (web UIs at kloud-worx.com)
@@ -393,16 +393,18 @@ As of the last session:
 - Kubernetes 1.30.14 cluster deployed (3 nodes Ready, Flannel CNI)
 - kubeconfig at ~/.kube/turingpi-cluster1.conf
 - Storage: Longhorn (NVMe /var/lib/longhorn-nvme, 2 nodes, eMMC disabled+evicted), NFS /dev/sda2 on rk1-worker-1, MinIO at 10.0.0.35
-- Addons: MetalLB (10.0.0.30-49), ingress-nginx (10.0.0.30), Grafana (10.0.0.37)
+- Addons: MetalLB (10.0.0.30-49), ingress-nginx (10.0.0.30), Grafana (10.0.0.37), Headlamp (10.0.0.38), Portainer (10.0.0.39)
 - Note: rk1-worker-2 /swapfile caused kubelet failure — fixed manually + hardened in 02-kubernetes.yml
 - Longhorn disk key: nvme-disk → /var/lib/longhorn-nvme; eMMC key: default-disk-c198b0f7bc4dffa4 (allowScheduling: false, evictionRequested: true)
 - Vault 2.0.3: initialized (5 shares, threshold 3), unsealed, KV-v2 at secret/, K8s auth enabled
-- ESO: ClusterSecretStore vault-backend Valid+Ready; minio ExternalSecret pending (needs make secrets)
+- ESO: ClusterSecretStore vault-backend Valid+Ready; minio ExternalSecret synced
+- Secrets: secret/llm-keys (ANTHROPIC_API_KEY + GEMINI_API_KEY are placeholders, LITELLM_MASTER_KEY set), secret/minio, secret/postgres, secret/tailscale, secret/cloudflare all populated in Vault
 - ~/.vault-init.json on WSL controller — 5 unseal keys + root token — BACK THIS UP
+- litellm_service_ip reassigned to 10.0.0.40 (10.0.0.30 was already taken by ingress-nginx)
 
 **Next immediate step:**
 ```bash
-make vault
+make ai-stack
 ```
 
 ---

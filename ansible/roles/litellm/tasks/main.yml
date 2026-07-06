@@ -11,6 +11,56 @@
   environment:
     KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
 
+# Namespace didn't exist yet when the external-secrets role tried to apply
+# this ExternalSecret (ignore_errors swallowed the failure), so the
+# litellm role creates + waits for its own copy here instead of relying on it.
+- name: Create llm-api-keys ExternalSecret
+  ansible.builtin.copy:
+    dest: /tmp/litellm-external-secret.yml
+    mode: "0644"
+    content: |
+      ---
+      apiVersion: external-secrets.io/v1
+      kind: ExternalSecret
+      metadata:
+        name: llm-api-keys
+        namespace: litellm
+      spec:
+        refreshInterval: 1m
+        secretStoreRef:
+          name: vault-backend
+          kind: ClusterSecretStore
+        target:
+          name: llm-api-keys
+          creationPolicy: Owner
+        data:
+          - secretKey: ANTHROPIC_API_KEY
+            remoteRef:
+              key: secret/llm-keys
+              property: ANTHROPIC_API_KEY
+          - secretKey: GEMINI_API_KEY
+            remoteRef:
+              key: secret/llm-keys
+              property: GEMINI_API_KEY
+          - secretKey: LITELLM_MASTER_KEY
+            remoteRef:
+              key: secret/llm-keys
+              property: LITELLM_MASTER_KEY
+
+- name: Apply llm-api-keys ExternalSecret
+  ansible.builtin.command: kubectl apply -f /tmp/litellm-external-secret.yml
+  changed_when: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+- name: Wait for llm-api-keys secret to sync from Vault
+  ansible.builtin.command: >
+    kubectl wait externalsecret/llm-api-keys -n litellm
+    --for=condition=Ready --timeout=90s
+  changed_when: false
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
 - name: Deploy LiteLLM config map
   ansible.builtin.copy:
     dest: /tmp/litellm-config.yml

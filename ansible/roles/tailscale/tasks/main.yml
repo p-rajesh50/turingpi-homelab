@@ -38,6 +38,18 @@
   changed_when: false
   failed_when: false
 
+- name: Enable IP forwarding for Tailscale subnet routing
+  ansible.posix.sysctl:
+    name: "{{ item }}"
+    value: "1"
+    sysctl_set: true
+    state: present
+    reload: true
+  loop:
+    - net.ipv4.ip_forward
+    - net.ipv6.conf.all.forwarding
+  when: inventory_hostname == 'rk1-control'
+
 - name: Connect to Tailscale network
   ansible.builtin.command: >
     tailscale up
@@ -46,7 +58,6 @@
     --accept-routes
     {% if inventory_hostname == 'rk1-control' %}
     --advertise-routes=10.0.0.0/24
-    --advertise-exit-node
     {% endif %}
   when: (tailscale_status.stdout | from_json).BackendState != 'Running'
   changed_when: true

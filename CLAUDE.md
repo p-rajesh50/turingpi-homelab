@@ -87,9 +87,9 @@ agentic app runtime, secrets management, and remote access.
 9. ✅ Cluster 1 — Vault + External Secrets Operator
 10. ✅ Cluster 1 — Secrets setup (API keys into Vault)
 11. ✅ Cluster 1 — AI stack (LiteLLM live; Qdrant/JupyterHub/LangGraph/Prefect still stub roles)
-12. ⬜ Cluster 1 — Developer tools (Gitea + CI/CD)   ← NEXT STEP
-13. ⬜ Cluster 1 — Tailscale (remote access)
-14. ⬜ Cluster 1 — Cloudflare Tunnel (web UIs at kloud-worx.com)
+12. ✅ Cluster 1 — Developer tools (Gitea + CI/CD)
+13. ⬜ Cluster 1 — Tailscale (remote access)   ← NEXT STEP
+14. ✅ Cluster 1 — Cloudflare Tunnel (web UIs at kloud-worx.com)
 15. ⬜ Jetson Orin NX — JetPack 7 flash (manual) + Ansible setup
 16. ⬜ Jetson Nano — JetPack 4.6 flash (manual) + Ansible setup
 17. ⬜ TrueNAS — SMB + NFS + Jellyfin (FreeBSD Core)
@@ -402,10 +402,12 @@ As of the last session:
 - ~/.vault-init.json on WSL controller — 5 unseal keys + root token — BACK THIS UP
 - litellm_service_ip reassigned to 10.0.0.40 (10.0.0.30 was already taken by ingress-nginx)
 - AI stack: LiteLLM live at http://10.0.0.40/v1 (pod healthy, memory limit raised 512Mi→2Gi after an OOMKill on boot); Qdrant/JupyterHub/LangGraph/Prefect/MCP-servers are still empty stub roles
+- Dev tools: Gitea + Actions runner deployed (SQLite backend, host-mode runner, self-provisioned ExternalSecret at secret/gitea); Step 12 complete
+- Cloudflare Tunnel: cloudflared healthy and connected; 10 CNAME DNS records created (kloud-worx.com); 8 hostnames (grafana, headlamp, portainer, minio, litellm, vault, gitea, prefect) behind Cloudflare Access (Google IdP, restricted to rajesh.pamulapati@gmail.com, 24h sessions); llm/jupyter reachable via tunnel but 502 until their backends (Orin NX, JupyterHub) are deployed; Step 14 complete — Step 13 (Tailscale) was skipped and is still pending
 
 **Next immediate step:**
 ```bash
-make dev-tools
+make tailscale
 ```
 
 ---

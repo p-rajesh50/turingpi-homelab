@@ -1,0 +1,65 @@
+---
+# ansible/roles/cloudflare-tunnel/tasks/access-app.yml
+# Included once per hostname in cloudflare_access_hostnames (loop_var: cf_hostname).
+# Expects cf_api_token, cf_account_id, cf_google_idp_id and cf_all_apps to already
+# be set by the including main.yml.
+
+- name: "Check for existing Access Application ({{ cf_hostname }})"
+  ansible.builtin.set_fact:
+    cf_existing_app: "{{ cf_all_apps.json.result | selectattr('domain', 'equalto', cf_hostname) | list }}"
+
+- name: "Create Access Application ({{ cf_hostname }})"
+  ansible.builtin.uri:
+    url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/access/apps"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ cf_api_token }}"
+      Content-Type: application/json
+    body_format: json
+    body:
+      name: "{{ cf_hostname }}"
+      domain: "{{ cf_hostname }}"
+      type: self_hosted
+      session_duration: "{{ cloudflare_access_session_duration }}"
+      allowed_idps:
+        - "{{ cf_google_idp_id }}"
+    status_code: [200, 201]
+  register: cf_created_app
+  when: cf_existing_app | length == 0
+  no_log: true
+
+- name: "Resolve Access Application ID ({{ cf_hostname }})"
+  ansible.builtin.set_fact:
+    cf_app_id: "{{ cf_existing_app[0].id if (cf_existing_app | length > 0) else cf_created_app.json.result.id }}"
+
+- name: "Check for existing Access Policy ({{ cf_hostname }})"
+  ansible.builtin.uri:
+    url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/access/apps/{{ cf_app_id }}/policies"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ cf_api_token }}"
+    status_code: [200]
+  register: cf_existing_policies
+  no_log: true
+
+- name: "Create Access Policy ({{ cf_hostname }})"
+  ansible.builtin.uri:
+    url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/access/apps/{{ cf_app_id }}/policies"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ cf_api_token }}"
+      Content-Type: application/json
+    body_format: json
+    body:
+      name: "Allow {{ cloudflare_access_allowed_email }}"
+      decision: allow
+      include:
+        - email:
+            email: "{{ cloudflare_access_allowed_email }}"
+      session_duration: "{{ cloudflare_access_session_duration }}"
+    status_code: [200, 201]
+  when: >-
+    cf_existing_policies.json.result
+    | selectattr('name', 'equalto', 'Allow ' + cloudflare_access_allowed_email)
+    | list | length == 0
+  no_log: true

@@ -1,0 +1,36 @@
+---
+# ansible/roles/cloudflare-tunnel/defaults/main.yml
+# Cloudflare Access (Zero Trust) settings for the hostnames exposed by this role.
+
+cloudflare_zero_trust_team_domain: "rapid-tooth-42c2.cloudflareaccess.com"
+cloudflare_access_idp_name: "Google"
+cloudflare_access_session_duration: "24h"
+cloudflare_access_allowed_email: "rajesh.pamulapati@gmail.com"
+
+cloudflare_tunnel_name: "turingpi-homelab"
+
+# All hostnames routed by the tunnel's ingress config (superset of
+# cloudflare_access_hostnames — llm and jupyter have no Access policy).
+cloudflare_tunnel_hostnames:
+  - vault.kloud-worx.com
+  - grafana.kloud-worx.com
+  - jupyter.kloud-worx.com
+  - gitea.kloud-worx.com
+  - llm.kloud-worx.com
+  - litellm.kloud-worx.com
+  - minio.kloud-worx.com
+  - prefect.kloud-worx.com
+  - headlamp.kloud-worx.com
+  - portainer.kloud-worx.com
+
+# Hostnames protected by Cloudflare Access. jupyter.kloud-worx.com and
+# llm.kloud-worx.com are intentionally left out of this list.
+cloudflare_access_hostnames:
+  - grafana.kloud-worx.com
+  - headlamp.kloud-worx.com
+  - portainer.kloud-worx.com
+  - minio.kloud-worx.com
+  - litellm.kloud-worx.com
+  - vault.kloud-worx.com
+  - gitea.kloud-worx.com
+  - prefect.kloud-worx.com

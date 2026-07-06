@@ -1,0 +1,30 @@
+---
+# ansible/roles/cloudflare-tunnel/tasks/dns-record.yml
+# Included once per hostname in cloudflare_tunnel_hostnames (loop_var: cf_hostname).
+# Expects cf_api_token, cf_zone_id, cf_tunnel_id and cf_all_dns_records to already
+# be set by the including main.yml.
+
+- name: "Check for existing CNAME record ({{ cf_hostname }})"
+  ansible.builtin.set_fact:
+    cf_existing_dns_record: >-
+      {{ cf_all_dns_records.json.result
+      | selectattr('type', 'equalto', 'CNAME')
+      | selectattr('name', 'equalto', cf_hostname)
+      | list }}
+
+- name: "Create CNAME record ({{ cf_hostname }})"
+  ansible.builtin.uri:
+    url: "https://api.cloudflare.com/client/v4/zones/{{ cf_zone_id }}/dns_records"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ cf_api_token }}"
+      Content-Type: application/json
+    body_format: json
+    body:
+      type: CNAME
+      name: "{{ cf_hostname }}"
+      content: "{{ cf_tunnel_id }}.cfargotunnel.com"
+      proxied: true
+    status_code: [200, 201]
+  when: cf_existing_dns_record | length == 0
+  no_log: true

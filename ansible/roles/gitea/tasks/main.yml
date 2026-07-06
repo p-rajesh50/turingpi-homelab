@@ -79,6 +79,12 @@
   environment:
     KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
 
+# strategy.type=Recreate: the chart's default RollingUpdate
+# (maxSurge=100%/maxUnavailable=0) starts the new pod before killing the old
+# one. Gitea's queue is a single-writer BoltDB-style lock file on the shared
+# RWO PVC, so two pods overlapping means the new one always loses the lock
+# race and crash-loops forever, keeping the rollout stuck. Recreate avoids
+# the overlap entirely.
 - name: Install Gitea
   ansible.builtin.command: >
     helm upgrade --install gitea gitea/gitea
@@ -92,6 +98,7 @@
     --set postgresql-ha.enabled=false
     --set valkey-cluster.enabled=false
     --set valkey.enabled=false
+    --set strategy.type=Recreate
     --set service.http.type=LoadBalancer
     --set service.http.annotations."metallb\.io/loadBalancerIPs"={{ gitea_service_ip }}
     --wait --timeout 10m

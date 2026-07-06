@@ -269,8 +269,17 @@ vault-status:
 # ─────────────────────────────────────────────────────────────────────────────
 # REMOTE ACCESS
 # ─────────────────────────────────────────────────────────────────────────────
+.PHONY: tailscale-prep
+tailscale-prep:
+	@ROOT_TOKEN=$$(python3 -c "import json; print(json.load(open('$(HOME)/.vault-init.json'))['root_token'])"); \
+	AUTH_KEY=$$(kubectl exec vault-0 -n vault -- sh -c "VAULT_TOKEN=$$ROOT_TOKEN vault kv get -field=AUTH_KEY secret/tailscale"); \
+	grep -v '^export TAILSCALE_AUTH_KEY=' "$(HOME)/.turingpi" > "$(HOME)/.turingpi.tmp"; \
+	echo "export TAILSCALE_AUTH_KEY='$$AUTH_KEY'" >> "$(HOME)/.turingpi.tmp"; \
+	mv "$(HOME)/.turingpi.tmp" "$(HOME)/.turingpi"
+	@echo "TAILSCALE_AUTH_KEY refreshed from Vault in ~/.turingpi"
+
 .PHONY: tailscale
-tailscale:
+tailscale: tailscale-prep
 	@source "$(HOME)/.turingpi" && \
 	ansible-playbook ansible/playbooks/10-tailscale.yml \
 		-i $(INVENTORY) \

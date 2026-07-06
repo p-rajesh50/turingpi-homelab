@@ -88,9 +88,9 @@ agentic app runtime, secrets management, and remote access.
 10. ✅ Cluster 1 — Secrets setup (API keys into Vault)
 11. ✅ Cluster 1 — AI stack (LiteLLM live; Qdrant/JupyterHub/LangGraph/Prefect still stub roles)
 12. ✅ Cluster 1 — Developer tools (Gitea + CI/CD)
-13. ⬜ Cluster 1 — Tailscale (remote access)   ← NEXT STEP
+13. ✅ Cluster 1 — Tailscale (remote access)
 14. ✅ Cluster 1 — Cloudflare Tunnel (web UIs at kloud-worx.com)
-15. ⬜ Jetson Orin NX — JetPack 7 flash (manual) + Ansible setup
+15. ⬜ Jetson Orin NX — JetPack 7 flash (manual) + Ansible setup   ← NEXT STEP
 16. ⬜ Jetson Nano — JetPack 4.6 flash (manual) + Ansible setup
 17. ⬜ TrueNAS — SMB + NFS + Jellyfin (FreeBSD Core)
 18. ⬜ Cluster 2 — CM4 cluster + Pi-hole + dev sandbox
@@ -403,12 +403,13 @@ As of the last session:
 - litellm_service_ip reassigned to 10.0.0.40 (10.0.0.30 was already taken by ingress-nginx)
 - AI stack: LiteLLM live at http://10.0.0.40/v1 (pod healthy, memory limit raised 512Mi→2Gi after an OOMKill on boot); Qdrant/JupyterHub/LangGraph/Prefect/MCP-servers are still empty stub roles
 - Dev tools: Gitea + Actions runner deployed (SQLite backend, host-mode runner, self-provisioned ExternalSecret at secret/gitea); Step 12 complete
-- Cloudflare Tunnel: cloudflared healthy and connected; 10 CNAME DNS records created (kloud-worx.com); 8 hostnames (grafana, headlamp, portainer, minio, litellm, vault, gitea, prefect) behind Cloudflare Access (Google IdP, restricted to rajesh.pamulapati@gmail.com, 24h sessions); llm/jupyter reachable via tunnel but 502 until their backends (Orin NX, JupyterHub) are deployed; Step 14 complete — Step 13 (Tailscale) was skipped and is still pending
+- Cloudflare Tunnel: cloudflared healthy and connected; 10 CNAME DNS records created (kloud-worx.com); 8 hostnames (grafana, headlamp, portainer, minio, litellm, vault, gitea, prefect) behind Cloudflare Access (Google IdP, restricted to rajesh.pamulapati@gmail.com, 24h sessions); llm/jupyter reachable via tunnel but 502 until their backends (Orin NX, JupyterHub) are deployed; Step 14 complete
+- Tailscale: mesh VPN live on rk1-control (100.96.0.102), rk1-worker-1 (100.81.77.8), rk1-worker-2 (100.111.182.46); rk1-control advertising 10.0.0.0/24 (pending approval in Tailscale admin console); added `make tailscale-prep` to resync TAILSCALE_AUTH_KEY from Vault before every run; fixed a role bug where the connect-skip check substring-matched raw JSON text for "Online" (always true — it's a JSON key name present even when disconnected) instead of parsing BackendState, which silently skipped `tailscale up` on every run; Step 13 complete
+- 10-tailscale.yml scoped to rk1_nodes only (jetson_orin/jetson_nano excluded until those devices are flashed/configured)
 
 **Next immediate step:**
-```bash
-make tailscale
-```
+Step 15 requires manually flashing JetPack 7 onto the Orin NX (slot 2) — no `make` target runs this
+part (hardware flash step). After flashing, run `make jetson-orin` to configure Ollama + Open WebUI.
 
 ---
 

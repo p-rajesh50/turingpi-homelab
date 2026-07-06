@@ -1,6 +1,6 @@
 ---
 # ansible/roles/tailscale/tasks/main.yml
-# Installs Tailscale on all cluster nodes and Jetson devices.
+# Installs Tailscale on the RK1 cluster nodes.
 # Enables subnet routing on rk1-control so your laptop can reach
 # the entire 10.0.0.0/24 network via one Tailscale connection.
 #
@@ -48,7 +48,7 @@
     --advertise-routes=10.0.0.0/24
     --advertise-exit-node
     {% endif %}
-  when: "'Online' not in tailscale_status.stdout"
+  when: (tailscale_status.stdout | from_json).BackendState != 'Running'
   changed_when: true
   no_log: true    # Don't log the auth key
 

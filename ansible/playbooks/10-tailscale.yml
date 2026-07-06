@@ -1,10 +1,11 @@
 ---
 # ansible/playbooks/10-tailscale.yml
-# Installs Tailscale on all cluster nodes and Jetson devices.
+# Installs Tailscale on the RK1 cluster nodes. Jetson devices are added once
+# they're flashed and configured (jetson-orin/jetson-nano roles).
 # Run after make kubernetes so nodes have their static IPs.
 
 - name: Install Tailscale on all nodes
-  hosts: rk1_nodes:jetson_nodes
+  hosts: rk1_nodes
   become: true
   vars:
     # Fetched from Vault by setup-api-keys.sh — do not hardcode here

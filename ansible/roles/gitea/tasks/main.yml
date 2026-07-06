@@ -28,8 +28,10 @@
 
 # Namespace didn't exist yet when the external-secrets role tried to apply
 # this ExternalSecret (same issue as litellm), so gitea self-provisions it.
-# Vault key is GITEA_ADMIN_USER but the chart's existingSecret expects
-# GITEA_ADMIN_USERNAME — renamed here via secretKey vs remoteRef.property.
+# The chart's gitea.admin.existingSecret expects lowercase keys
+# username/password/email (confirmed from the pod's actual init-container
+# error, not chart docs — those describe an unrelated Vault-injection
+# example under a similar-looking key name).
 - name: Create gitea-admin-credentials ExternalSecret
   ansible.builtin.copy:
     dest: /tmp/gitea-external-secret.yml
@@ -50,15 +52,15 @@
           name: gitea-admin-credentials
           creationPolicy: Owner
         data:
-          - secretKey: GITEA_ADMIN_USERNAME
+          - secretKey: username
             remoteRef:
               key: secret/gitea
               property: GITEA_ADMIN_USER
-          - secretKey: GITEA_ADMIN_PASSWORD
+          - secretKey: password
             remoteRef:
               key: secret/gitea
               property: GITEA_ADMIN_PASSWORD
-          - secretKey: GITEA_ADMIN_EMAIL
+          - secretKey: email
             remoteRef:
               key: secret/gitea
               property: GITEA_ADMIN_EMAIL
@@ -81,7 +83,6 @@
   ansible.builtin.command: >
     helm upgrade --install gitea gitea/gitea
     --namespace gitea --create-namespace
-    --version {{ gitea_version }}
     --set persistence.enabled=true
     --set persistence.storageClass=longhorn
     --set persistence.size={{ gitea_storage_size }}
@@ -89,6 +90,8 @@
     --set gitea.config.database.DB_TYPE=sqlite3
     --set postgresql.enabled=false
     --set postgresql-ha.enabled=false
+    --set valkey-cluster.enabled=false
+    --set valkey.enabled=false
     --set service.http.type=LoadBalancer
     --set service.http.annotations."metallb\.io/loadBalancerIPs"={{ gitea_service_ip }}
     --wait --timeout 10m

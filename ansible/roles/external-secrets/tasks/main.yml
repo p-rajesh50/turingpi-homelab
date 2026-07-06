@@ -159,8 +159,9 @@
               property: POSTGRES_USER
       ---
       # Gitea admin credentials
-      # Note: Vault property is GITEA_ADMIN_USER but the gitea Helm chart's
-      # existingSecret expects GITEA_ADMIN_USERNAME — renamed below.
+      # Note: the gitea Helm chart's existingSecret expects lowercase keys
+      # username/password/email (confirmed from the pod's init-container
+      # error at deploy time, not the chart docs).
       apiVersion: external-secrets.io/v1
       kind: ExternalSecret
       metadata:
@@ -175,15 +176,15 @@
           name: gitea-admin-credentials
           creationPolicy: Owner
         data:
-          - secretKey: GITEA_ADMIN_USERNAME
+          - secretKey: username
             remoteRef:
               key: secret/gitea
               property: GITEA_ADMIN_USER
-          - secretKey: GITEA_ADMIN_PASSWORD
+          - secretKey: password
             remoteRef:
               key: secret/gitea
               property: GITEA_ADMIN_PASSWORD
-          - secretKey: GITEA_ADMIN_EMAIL
+          - secretKey: email
             remoteRef:
               key: secret/gitea
               property: GITEA_ADMIN_EMAIL

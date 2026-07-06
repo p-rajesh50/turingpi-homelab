@@ -25,10 +25,10 @@ bmc2_ip: "10.0.0.20"                 # tpi2-bmc (Cluster 2) — future
 # Node static IPs — matches confirmed slot mapping
 node_ips:
   rk1_control:   "10.0.0.11"         # slot 1
-  rk1_worker_1:  "10.0.0.12"         # slot 3
+  rk1_worker_1:  "10.0.0.12"         # slot 2 (moved from slot 3 after hardware fault)
   rk1_worker_2:  "10.0.0.13"         # slot 4
-  orin_nx:       "10.0.0.14"         # slot 2
   jetson_nano:   "10.0.0.15"         # standalone
+  # orin_nx removed — module pulled from the board, deferred indefinitely
 
 # Kubernetes networking (must not overlap with 10.0.0.0/24)
 pod_cidr: "10.244.0.0/16"
@@ -43,9 +43,8 @@ ssh_public_key_path: "~/.ssh/turingpi_homelab.pub"
 ssh_private_key_path: "~/.ssh/turingpi_homelab"
 
 # ── Kubernetes ────────────────────────────────────────────────────────────────
-kubernetes_version: "1.30"
-kubernetes_cni: "flannel"
-containerd_version: "1.7"
+k3s_version: "v1.30.5+k3s1"
+k3s_server_ip: "10.0.0.11"
 
 # ── Storage ───────────────────────────────────────────────────────────────────
 # Longhorn (replicated block storage — NVMe on all RK1 nodes)

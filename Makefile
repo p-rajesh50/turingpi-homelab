@@ -27,7 +27,7 @@ help:
 	@echo "  CLUSTER BUILD (run in order)"
 	@echo "    make bootstrap        SSH keys, hostnames, static IPs"
 	@echo "    make common           Hardening, packages, NTP, firewall"
-	@echo "    make kubernetes       Deploy K8s cluster (control + workers)"
+	@echo "    make kubernetes       Deploy K3s cluster (server + agents + Cilium CNI)"
 	@echo "    make storage          Longhorn (NVMe) + NFS (SATA) + MinIO"
 	@echo "    make longhorn-nvme    Move Longhorn from eMMC to NVMe + migrate volumes"
 	@echo "    make addons           MetalLB, ingress, Prometheus, Grafana"
@@ -111,10 +111,23 @@ common:
 	ansible-playbook ansible/playbooks/01-common.yml \
 		-i $(INVENTORY) $(ANSIBLE_ARGS)
 
-.PHONY: kubernetes
-kubernetes:
+.PHONY: k3s-server
+k3s-server:
 	ansible-playbook ansible/playbooks/02-kubernetes.yml \
+		-i $(INVENTORY) --limit rk1-control $(ANSIBLE_ARGS)
+
+.PHONY: k3s-agents
+k3s-agents:
+	ansible-playbook ansible/playbooks/02-kubernetes.yml \
+		-i $(INVENTORY) --limit rk1_workers $(ANSIBLE_ARGS)
+
+.PHONY: cilium
+cilium:
+	ansible-playbook ansible/playbooks/02b-cilium.yml \
 		-i $(INVENTORY) $(ANSIBLE_ARGS)
+
+.PHONY: kubernetes
+kubernetes: k3s-server k3s-agents cilium
 
 .PHONY: storage
 storage:

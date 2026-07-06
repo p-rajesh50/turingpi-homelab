@@ -1,6 +1,8 @@
 ---
 # ansible/playbooks/02-kubernetes.yml
-# Deploys a 3-node Kubernetes cluster on RK1 nodes (slots 1, 3, 4).
+# Deploys a 3-node K3s cluster on RK1 nodes (slots 1, 2, 4). CNI (Cilium) is installed
+# separately by 02b-cilium.yml — K3s comes up here with --flannel-backend=none, so nodes
+# will register but stay NotReady until that playbook runs.
 
 # ── Phase 1: OS prep on all RK1 nodes ────────────────────────────────────────
 - name: Kubernetes OS prerequisites
@@ -49,102 +51,24 @@
         - { key: "net.bridge.bridge-nf-call-ip6tables", value: "1" }
         - { key: "net.ipv4.ip_forward",                 value: "1" }
 
-    - name: Install containerd prerequisites
-      ansible.builtin.apt:
-        name: [apt-transport-https, ca-certificates, curl, gnupg, containerd]
-        state: present
-        update_cache: true
-
-    - name: Create containerd config dir
-      ansible.builtin.file:
-        path: /etc/containerd
-        state: directory
-        mode: "0755"
-
-    - name: Generate containerd config
-      ansible.builtin.shell: containerd config default > /etc/containerd/config.toml
-      args:
-        creates: /etc/containerd/config.toml
-
-    - name: Enable SystemdCgroup in containerd
-      ansible.builtin.replace:
-        path: /etc/containerd/config.toml
-        regexp: 'SystemdCgroup = false'
-        replace: 'SystemdCgroup = true'
-
-    - name: Enable containerd
-      ansible.builtin.systemd:
-        name: containerd
-        enabled: true
-        state: restarted
-
-    - name: Create apt keyrings directory
-      ansible.builtin.file:
-        path: /etc/apt/keyrings
-        state: directory
-        mode: "0755"
-
-    - name: Add Kubernetes apt key
-      ansible.builtin.get_url:
-        url: "https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version }}/deb/Release.key"
-        dest: /etc/apt/keyrings/kubernetes-apt-keyring.asc
-        mode: "0644"
-
-    - name: Add Kubernetes apt repository
-      ansible.builtin.apt_repository:
-        repo: "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.asc] https://pkgs.k8s.io/core:/stable:/v{{ kubernetes_version }}/deb/ /"
-        state: present
-        filename: kubernetes
-
-    - name: Install kubeadm kubelet kubectl
-      ansible.builtin.apt:
-        name: [kubeadm, kubelet, kubectl]
-        state: present
-        update_cache: true
-
-    - name: Hold Kubernetes packages
-      ansible.builtin.dpkg_selections:
-        name: "{{ item }}"
-        selection: hold
-      loop: [kubeadm, kubelet, kubectl]
-
-    - name: Enable kubelet
-      ansible.builtin.systemd:
-        name: kubelet
-        enabled: true
-
     - name: Install Helm
       ansible.builtin.shell: |
         curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
       args:
         creates: /usr/local/bin/helm
 
-# ── Phase 2: Control plane ────────────────────────────────────────────────────
-- name: Initialize Kubernetes control plane
+# ── Phase 2: K3s server ───────────────────────────────────────────────────────
+- name: Initialize K3s server
   hosts: k8s_control
   become: true
-  tags: [k8s-control]
+  tags: [k3s-server]
   roles:
-    - role: k8s-control
+    - role: k3s-server
 
-# ── Phase 3: Workers join ─────────────────────────────────────────────────────
-- name: Join worker nodes
+# ── Phase 3: K3s agents join ──────────────────────────────────────────────────
+- name: Join K3s agents
   hosts: k8s_workers
   become: true
-  tags: [k8s-workers]
+  tags: [k3s-agents]
   roles:
-    - role: k8s-worker
-
-# ── Phase 4: CNI ──────────────────────────────────────────────────────────────
-- name: Deploy Flannel CNI
-  hosts: k8s_control
-  become: false
-  tags: [k8s-cni]
-  tasks:
-    - name: Apply Flannel manifest
-      ansible.builtin.command: >
-        kubectl apply -f
-        https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
-      environment:
-        KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
-      changed_when: true
+    - role: k3s-agent

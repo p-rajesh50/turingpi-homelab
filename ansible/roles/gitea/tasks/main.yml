@@ -1,0 +1,178 @@
+---
+# Gitea — self-hosted Git + Actions runner (CI/CD)
+# Database: SQLite (single file on the Longhorn PVC — no separate Postgres
+# subchart; this repo has no shared Postgres instance yet).
+# Actions runner: host-mode execution (no privileged Docker socket mount) —
+# CI workflows must use `runs-on: host` and plain `run:` steps only, no
+# `uses: docker://...` container actions.
+
+- name: Create gitea namespace
+  ansible.builtin.shell: kubectl create namespace gitea --dry-run=client -o yaml | kubectl apply -f -
+  args:
+    executable: /bin/bash
+  changed_when: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+- name: Add Gitea Helm repo
+  ansible.builtin.command: helm repo add gitea https://dl.gitea.com/charts/
+  changed_when: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+- name: Update Helm repos
+  ansible.builtin.command: helm repo update
+  changed_when: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+# Namespace didn't exist yet when the external-secrets role tried to apply
+# this ExternalSecret (same issue as litellm), so gitea self-provisions it.
+# Vault key is GITEA_ADMIN_USER but the chart's existingSecret expects
+# GITEA_ADMIN_USERNAME — renamed here via secretKey vs remoteRef.property.
+- name: Create gitea-admin-credentials ExternalSecret
+  ansible.builtin.copy:
+    dest: /tmp/gitea-external-secret.yml
+    mode: "0644"
+    content: |
+      ---
+      apiVersion: external-secrets.io/v1
+      kind: ExternalSecret
+      metadata:
+        name: gitea-admin-credentials
+        namespace: gitea
+      spec:
+        refreshInterval: 1m
+        secretStoreRef:
+          name: vault-backend
+          kind: ClusterSecretStore
+        target:
+          name: gitea-admin-credentials
+          creationPolicy: Owner
+        data:
+          - secretKey: GITEA_ADMIN_USERNAME
+            remoteRef:
+              key: secret/gitea
+              property: GITEA_ADMIN_USER
+          - secretKey: GITEA_ADMIN_PASSWORD
+            remoteRef:
+              key: secret/gitea
+              property: GITEA_ADMIN_PASSWORD
+          - secretKey: GITEA_ADMIN_EMAIL
+            remoteRef:
+              key: secret/gitea
+              property: GITEA_ADMIN_EMAIL
+
+- name: Apply gitea-admin-credentials ExternalSecret
+  ansible.builtin.command: kubectl apply -f /tmp/gitea-external-secret.yml
+  changed_when: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+- name: Wait for gitea-admin-credentials secret to sync from Vault
+  ansible.builtin.command: >
+    kubectl wait externalsecret/gitea-admin-credentials -n gitea
+    --for=condition=Ready --timeout=90s
+  changed_when: false
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+- name: Install Gitea
+  ansible.builtin.command: >
+    helm upgrade --install gitea gitea/gitea
+    --namespace gitea --create-namespace
+    --version {{ gitea_version }}
+    --set persistence.enabled=true
+    --set persistence.storageClass=longhorn
+    --set persistence.size={{ gitea_storage_size }}
+    --set gitea.admin.existingSecret=gitea-admin-credentials
+    --set gitea.config.database.DB_TYPE=sqlite3
+    --set postgresql.enabled=false
+    --set postgresql-ha.enabled=false
+    --set service.http.type=LoadBalancer
+    --set service.http.annotations."metallb\.io/loadBalancerIPs"={{ gitea_service_ip }}
+    --wait --timeout 10m
+  changed_when: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+# Generates a fresh runner registration token (invalidates any previous one —
+# fine, since the runner Deployment below is redeployed with it each run).
+- name: Generate Gitea Actions runner registration token
+  ansible.builtin.command: >
+    kubectl exec deploy/gitea -n gitea -c gitea --
+    gitea actions generate-runner-token
+  register: gitea_runner_token
+  changed_when: false
+  no_log: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+- name: Store runner registration token as a Secret
+  ansible.builtin.shell: >
+    kubectl create secret generic gitea-runner-token -n gitea
+    --from-literal=token={{ gitea_runner_token.stdout | trim }}
+    --dry-run=client -o yaml | kubectl apply -f -
+  args:
+    executable: /bin/bash
+  changed_when: true
+  no_log: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+- name: Deploy Gitea Actions runner
+  ansible.builtin.copy:
+    dest: /tmp/gitea-runner-deploy.yml
+    mode: "0644"
+    content: |
+      ---
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: gitea-act-runner
+        namespace: gitea
+      spec:
+        replicas: 2
+        selector:
+          matchLabels:
+            app: gitea-act-runner
+        template:
+          metadata:
+            labels:
+              app: gitea-act-runner
+          spec:
+            containers:
+              - name: act-runner
+                image: gitea/act_runner:latest
+                env:
+                  - name: GITEA_INSTANCE_URL
+                    value: "http://gitea-http.gitea.svc.cluster.local:3000"
+                  - name: GITEA_RUNNER_REGISTRATION_TOKEN
+                    valueFrom:
+                      secretKeyRef:
+                        name: gitea-runner-token
+                        key: token
+                  - name: GITEA_RUNNER_LABELS
+                    value: "host:host"
+                resources:
+                  requests:
+                    memory: 256Mi
+                    cpu: 250m
+                  limits:
+                    memory: 512Mi
+                    cpu: 500m
+
+- name: Apply Gitea Actions runner deployment
+  ansible.builtin.command: kubectl apply -f /tmp/gitea-runner-deploy.yml
+  changed_when: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+- name: Print Gitea summary
+  ansible.builtin.debug:
+    msg:
+      - "Gitea: http://{{ gitea_service_ip }}:3000"
+      - "Admin user: gitea-admin (password/email in Vault at secret/gitea)"
+      - "Database: SQLite (single file on the Longhorn PVC)"
+      - "Actions runner: 2 replicas, host-mode execution (no Docker socket)"
+      - "CI workflows must use: runs-on: host — plain run: steps only, no uses: docker://... actions"

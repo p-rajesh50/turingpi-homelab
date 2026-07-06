@@ -86,8 +86,8 @@ agentic app runtime, secrets management, and remote access.
 8. ✅ Cluster 1 — Cluster add-ons (MetalLB, ingress, Prometheus)
 9. ✅ Cluster 1 — Vault + External Secrets Operator
 10. ✅ Cluster 1 — Secrets setup (API keys into Vault)
-11. ⬜ Cluster 1 — AI stack (LiteLLM, Qdrant, JupyterHub, LangGraph, Prefect)   ← NEXT STEP
-12. ⬜ Cluster 1 — Developer tools (Gitea + CI/CD)
+11. ✅ Cluster 1 — AI stack (LiteLLM live; Qdrant/JupyterHub/LangGraph/Prefect still stub roles)
+12. ⬜ Cluster 1 — Developer tools (Gitea + CI/CD)   ← NEXT STEP
 13. ⬜ Cluster 1 — Tailscale (remote access)
 14. ⬜ Cluster 1 — Cloudflare Tunnel (web UIs at kloud-worx.com)
 15. ⬜ Jetson Orin NX — JetPack 7 flash (manual) + Ansible setup
@@ -398,13 +398,14 @@ As of the last session:
 - Longhorn disk key: nvme-disk → /var/lib/longhorn-nvme; eMMC key: default-disk-c198b0f7bc4dffa4 (allowScheduling: false, evictionRequested: true)
 - Vault 2.0.3: initialized (5 shares, threshold 3), unsealed, KV-v2 at secret/, K8s auth enabled
 - ESO: ClusterSecretStore vault-backend Valid+Ready; minio ExternalSecret synced
-- Secrets: secret/llm-keys (ANTHROPIC_API_KEY + GEMINI_API_KEY are placeholders, LITELLM_MASTER_KEY set), secret/minio, secret/postgres, secret/tailscale, secret/cloudflare all populated in Vault
+- Secrets: secret/llm-keys (ANTHROPIC_API_KEY + GEMINI_API_KEY are placeholders, LITELLM_MASTER_KEY set), secret/minio, secret/postgres, secret/tailscale, secret/cloudflare, secret/gitea all populated in Vault
 - ~/.vault-init.json on WSL controller — 5 unseal keys + root token — BACK THIS UP
 - litellm_service_ip reassigned to 10.0.0.40 (10.0.0.30 was already taken by ingress-nginx)
+- AI stack: LiteLLM live at http://10.0.0.40/v1 (pod healthy, memory limit raised 512Mi→2Gi after an OOMKill on boot); Qdrant/JupyterHub/LangGraph/Prefect/MCP-servers are still empty stub roles
 
 **Next immediate step:**
 ```bash
-make ai-stack
+make dev-tools
 ```
 
 ---

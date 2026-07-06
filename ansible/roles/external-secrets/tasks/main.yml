@@ -157,6 +157,36 @@
             remoteRef:
               key: secret/postgres
               property: POSTGRES_USER
+      ---
+      # Gitea admin credentials
+      # Note: Vault property is GITEA_ADMIN_USER but the gitea Helm chart's
+      # existingSecret expects GITEA_ADMIN_USERNAME — renamed below.
+      apiVersion: external-secrets.io/v1
+      kind: ExternalSecret
+      metadata:
+        name: gitea-admin-credentials
+        namespace: gitea
+      spec:
+        refreshInterval: 1m
+        secretStoreRef:
+          name: vault-backend
+          kind: ClusterSecretStore
+        target:
+          name: gitea-admin-credentials
+          creationPolicy: Owner
+        data:
+          - secretKey: GITEA_ADMIN_USERNAME
+            remoteRef:
+              key: secret/gitea
+              property: GITEA_ADMIN_USER
+          - secretKey: GITEA_ADMIN_PASSWORD
+            remoteRef:
+              key: secret/gitea
+              property: GITEA_ADMIN_PASSWORD
+          - secretKey: GITEA_ADMIN_EMAIL
+            remoteRef:
+              key: secret/gitea
+              property: GITEA_ADMIN_EMAIL
 
 - name: Apply ExternalSecret manifests
   ansible.builtin.command: kubectl apply -f /tmp/external-secrets.yml

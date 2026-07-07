@@ -185,8 +185,9 @@ rk1-worker-2: 100.111.182.46 (pre-rebuild, will change on redeploy)
 │   │   ├── 01-common.yml        ← Includes permanent swap disable + fail2ban ignoreip
 │   │   ├── 02-kubernetes.yml    ← K3s server + agent plays (kubeadm removed)
 │   │   ├── 02b-cilium.yml       ← NEW — Cilium CNI install
-│   │   ├── 03-storage.yml       ← Longhorn + NFS + MinIO — NEXT STEP
-│   │   ├── 04-cluster-addons.yml ← MetalLB, Ingress, Grafana, Headlamp, Portainer
+│   │   ├── 03-storage.yml       ← Longhorn + NFS + MinIO — LIVE, verified healthy
+│   │   ├── 03b-longhorn-nvme.yml ← Longhorn NVMe migration — LIVE, verified healthy
+│   │   ├── 04-cluster-addons.yml ← MetalLB, Ingress, Grafana, Headlamp, Portainer — NEXT STEP
 │   │   ├── 05-ai-stack.yml      ← LiteLLM etc. (needs re-deploy, data wiped)
 │   │   ├── 06-dev-tools.yml     ← Gitea (needs re-deploy, data wiped)
 │   │   ├── 07-jetson-orin.yml   ← Deferred (module removed from board)
@@ -198,9 +199,9 @@ rk1-worker-2: 100.111.182.46 (pre-rebuild, will change on redeploy)
 │       ├── common/              ← disable-swap systemd service + fail2ban ignoreip
 │       ├── k3s-server/          ← Live, verified working
 │       ├── k3s-agent/           ← Live, verified working (token fetched via delegate_to)
-│       ├── longhorn/            ← NVMe only — NEXT to deploy
-│       ├── nfs-server/          ← /dev/sda2 on rk1-worker-1 — device path confirmed
-│       ├── minio/
+│       ├── longhorn/            ← NVMe-backed on rk1-worker-1/2 — live, verified
+│       ├── nfs-server/          ← /dev/sda2 on rk1-worker-1 — live, verified
+│       ├── minio/               ← live, verified (NVMe-backed PVC, pod Running)
 │       ├── litellm/             ← Needs re-deploy
 │       ├── vault/               ← Needs re-deploy
 │       ├── external-secrets/
@@ -250,22 +251,46 @@ allocations and may be reused, but nothing currently exists at them):
 
 ---
 
-## NEXT STEP (tomorrow morning): `make storage`
+## STORAGE IS LIVE AND VERIFIED HEALTHY (July 7 2026, later session)
 
-Picked back up here — session paused for the night at ~1:30 AM July 7 2026.
+`make storage` and `make longhorn-nvme` have both been run successfully:
 
-The NFS SATA device path on rk1-worker-1 has been **confirmed as `/dev/sda2`** (via
-`lsblk`/`fdisk -l` after the slot 3→2 move and mini-PCIe adapter install) — no
-`vars.yml`/`hosts.yml` changes needed. The very next action is simply:
-```bash
-make storage
-```
-Verify storage is healthy before proceeding further (Longhorn volumes come up,
-NFS export mounts, MinIO pod healthy).
+- **NFS**: live on rk1-worker-1 (`/dev/sda2` → `/mnt/sata/k8s`), export mounted.
+- **Longhorn**: NVMe-backed on rk1-worker-1 + rk1-worker-2 (`/var/lib/longhorn-nvme`),
+  default StorageClass. rk1-control's eMMC disk is intentionally not used for
+  scheduling (matches the Storage Architecture table below).
+- **MinIO**: `1/1 Running`, both replicas on NVMe, LoadBalancer IP `10.0.0.35`.
+- **StorageClasses**: `longhorn` (default, replicated) and `nfs-shared` (SATA,
+  shared) both present and working.
 
-After storage is verified healthy, continue in order: `make addons` → `make vault`
-→ `make secrets` → `make ai-stack` → `make dev-tools` → `make tailscale` →
-`make cloudflare`.
+### Two real bugs found and fixed this pass:
+
+1. **Stale kubeconfig on rk1-control** (`/home/ubuntu/.kube/config`) was left over
+   from the pre-rebuild kubeadm cluster (different CA) — nothing in the K3s rebuild
+   ever recreated it, but `longhorn`/`minio`/`vault`/`gitea`/`litellm`/
+   `external-secrets`/`cloudflare-tunnel`/addons roles all point Helm/kubectl at
+   exactly that path. Caused `helm upgrade --install longhorn ...` to fail with
+   `x509: certificate signed by unknown authority`. **Fixed** in
+   `ansible/roles/k3s-server/tasks/main.yml`: added a task that copies the live
+   `/etc/rancher/k3s/k3s.yaml` to `/home/{{ admin_user }}/.kube/config` on
+   rk1-control right after the K3s server installs. This fixes every downstream role
+   that reads that path, not just longhorn — re-ran `make kubernetes --tags
+   k3s-server` once to lay down the fresh file before retrying `make storage`.
+2. **Longhorn defaulted to the eMMC disk** (`/var/lib/longhorn`, ~30GB) on initial
+   install, which is far too small for MinIO's 200Gi PVC — its engine/replicas never
+   attached ("volume is not ready for workloads"). This is the known, already-planned
+   Step 7b (`make longhorn-nvme` / `03b-longhorn-nvme.yml`), which migrates Longhorn
+   to the NVMe disks and reinstalls MinIO. First run of it hung on the eviction-poll
+   step because an ad hoc `test-longhorn-pvc` (created for verification) had a
+   replica pinned to rk1-control's eMMC disk, which that playbook intentionally never
+   touches (NVMe Longhorn is worker-only by design). Deleted the test PVC and re-ran
+   — completed cleanly in ~90s.
+
+### NEXT STEP: `make addons`
+
+Continue in order: `make addons` (MetalLB, ingress-nginx, Prometheus, Grafana,
+Dashboard) → `make vault` → `make secrets` → `make ai-stack` → `make dev-tools` →
+`make tailscale` → `make cloudflare`.
 
 ---
 

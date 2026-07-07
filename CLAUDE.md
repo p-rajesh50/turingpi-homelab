@@ -478,3 +478,33 @@ agent = Agent(
 8. **Storage devices:** NVMe=`/dev/nvme0n1` (Longhorn, slot 2+4), SATA (NFS, rk1-worker-1
    in slot 2 via mini-PCIe adapter — device path **unverified**, don't assume `/dev/sda2`
    until confirmed with `lsblk`/`fdisk -l` post-reflash)
+
+---
+
+## Future Enhancements Backlog
+
+Not scheduled — ideas to revisit once the core stack (Steps 6-14) is deployed and stable.
+Ranked by priority.
+
+1. **ArgoCD** — GitOps operator for self-healing Helm deployments and automated upgrades;
+   would replace/complement the current Ansible push model.
+   *Prerequisite:* core stack stable (post Step 14).
+
+2. **RK1 NPU Device Plugin** — exposes the RK3588's built-in NPU to Kubernetes pods for
+   on-device inference without a GPU. Reference implementation for the same hardware:
+   https://github.com/tylertitsworth/ai-cluster.
+   *Prerequisite:* K3s+Cilium cluster stable (done).
+
+3. **Loki** — log aggregation to complement the existing Prometheus+Grafana stack, completing
+   the observability triad (metrics, logs, traces).
+   *Prerequisite:* `make addons` (Prometheus/Grafana) deployed.
+
+4. **Flyte** — ML pipeline orchestration for distributed training and experiment tracking.
+   *Prerequisite:* Jetson Nano and/or RK1 NPU workloads active.
+
+5. **Chroma** — vector database for RAG applications.
+   *Prerequisite:* LiteLLM gateway serving local models (Step 11).
+
+6. **Nvidia Device Plugin + Jetson Exporter** — GPU scheduling and metrics for the standalone
+   Jetson Nano once it joins the cluster.
+   *Prerequisite:* Jetson Nano JetPack flash + Ansible setup (Step 16).

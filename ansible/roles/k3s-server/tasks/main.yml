@@ -28,6 +28,23 @@
   delay: 5
   changed_when: false
 
+- name: Ensure admin user's .kube directory exists
+  ansible.builtin.file:
+    path: "/home/{{ admin_user }}/.kube"
+    state: directory
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0700"
+
+- name: Copy K3s kubeconfig to admin user's default kubectl/Helm location
+  ansible.builtin.copy:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: "/home/{{ admin_user }}/.kube/config"
+    remote_src: true
+    owner: "{{ admin_user }}"
+    group: "{{ admin_user }}"
+    mode: "0600"
+
 - name: Fetch kubeconfig to workstation
   ansible.builtin.fetch:
     src: /etc/rancher/k3s/k3s.yaml

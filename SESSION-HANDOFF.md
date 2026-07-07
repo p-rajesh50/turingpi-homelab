@@ -32,10 +32,10 @@ Local repo: ~/projects/turingpi-homelab (WSL2 Ubuntu 24.04 on Windows 11, machin
 - **rk1-worker-1 was physically moved from slot 3 to slot 2** to work around the fault.
 - **Orin NX module was physically removed from the board** — Jetson Orin setup is
   deferred indefinitely until it's reinstalled somewhere.
-- **NFS SATA SSD** (previously wired to slot 3's carrierboard SATA port) is being
-  re-homed via a mini-PCIe SATA adapter card in slot 2. **Device path unverified** —
-  confirm with `lsblk`/`fdisk -l` on rk1-worker-1 before running `make storage`; it
-  may no longer be `/dev/sda2`.
+- **NFS SATA SSD** (previously wired to slot 3's carrierboard SATA port) is now
+  re-homed via a mini-PCIe SATA adapter card in slot 2. **Device path confirmed**
+  (`lsblk`/`fdisk -l` on rk1-worker-1) — still `/dev/sda2`, no `vars.yml`/`hosts.yml`
+  changes needed.
 
 ---
 
@@ -199,7 +199,7 @@ rk1-worker-2: 100.111.182.46 (pre-rebuild, will change on redeploy)
 │       ├── k3s-server/          ← Live, verified working
 │       ├── k3s-agent/           ← Live, verified working (token fetched via delegate_to)
 │       ├── longhorn/            ← NVMe only — NEXT to deploy
-│       ├── nfs-server/          ← /dev/sda2 on rk1-worker-1 — device path UNVERIFIED
+│       ├── nfs-server/          ← /dev/sda2 on rk1-worker-1 — device path confirmed
 │       ├── minio/
 │       ├── litellm/             ← Needs re-deploy
 │       ├── vault/               ← Needs re-deploy
@@ -250,23 +250,18 @@ allocations and may be reused, but nothing currently exists at them):
 
 ---
 
-## NEXT STEP: `make storage`
+## NEXT STEP (tomorrow morning): `make storage`
 
-The immediate next step is deploying storage (Longhorn + NFS + MinIO) on the new
-K3s+Cilium cluster.
+Picked back up here — session paused for the night at ~1:30 AM July 7 2026.
 
-**Before running it**, verify the NFS SATA device path on rk1-worker-1 — it's wired
-via a new mini-PCIe SATA adapter after the slot 3→2 move and was never confirmed:
-```bash
-ssh -i ~/.ssh/turingpi_homelab ubuntu@10.0.0.12 "lsblk; sudo fdisk -l"
-```
-If the device isn't `/dev/sda2`, update `storage_device_sata` in `hosts.yml` and
-`nfs_sata_device`/`nfs_export_path` in `vars.yml` before proceeding.
-
-Then:
+The NFS SATA device path on rk1-worker-1 has been **confirmed as `/dev/sda2`** (via
+`lsblk`/`fdisk -l` after the slot 3→2 move and mini-PCIe adapter install) — no
+`vars.yml`/`hosts.yml` changes needed. The very next action is simply:
 ```bash
 make storage
 ```
+Verify storage is healthy before proceeding further (Longhorn volumes come up,
+NFS export mounts, MinIO pod healthy).
 
 After storage is verified healthy, continue in order: `make addons` → `make vault`
 → `make secrets` → `make ai-stack` → `make dev-tools` → `make tailscale` →
@@ -326,12 +321,11 @@ After storage is verified healthy, continue in order: `make addons` → `make va
 | rk1-control | /dev/nvme0n1 | 953.9GB | NVMe | Longhorn |
 | rk1-control | /dev/mmcblk0 | 29.1GB | eMMC | Boot OS only |
 | rk1-worker-1 | /dev/nvme0n1 | 953.9GB | NVMe | Longhorn |
-| rk1-worker-1 | /dev/sda2 (UNVERIFIED) | 476.4GB | SATA partition via mini-PCIe adapter | NFS export |
+| rk1-worker-1 | /dev/sda2 (confirmed) | 476.4GB | SATA partition via mini-PCIe adapter | NFS export |
 | rk1-worker-2 | /dev/nvme0n1 | 931.5GB | NVMe | Longhorn |
 | rk1-worker-2 | /dev/sda | 57.8GB | USB | Ignore for now |
 
-NFS export path: /mnt/sata/k8s (on rk1-worker-1 at 10.0.0.12) — **confirm device
-path before use, see "Next Step" above**
+NFS export path: /mnt/sata/k8s (on rk1-worker-1 at 10.0.0.12) — device path confirmed
 
 ---
 
@@ -381,8 +375,8 @@ from where we left off.
 [paste this entire document]
 
 Current immediate task: the K3s+Cilium cluster is live and verified
-healthy on all 3 nodes. Next step is `make storage` (Longhorn + NFS +
-MinIO) — but first verify the NFS SATA device path on rk1-worker-1
-(see "Next Step" section above), since it may not still be /dev/sda2
-after the slot 3→2 hardware move.
+healthy on all 3 nodes. The NFS SATA device path on rk1-worker-1 is
+confirmed (/dev/sda2, no vars.yml changes needed). Next step is
+`make storage` (Longhorn + NFS + MinIO), then verify it's healthy
+before proceeding further.
 ```

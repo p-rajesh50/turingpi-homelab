@@ -20,18 +20,6 @@
     path: /var/lib/rancher/k3s/server/node-token
     timeout: 120
 
-- name: Read node-token
-  ansible.builtin.slurp:
-    src: /var/lib/rancher/k3s/server/node-token
-  register: k3s_node_token_raw
-
-- name: Share node-token with agent nodes
-  ansible.builtin.set_fact:
-    k3s_node_token: "{{ k3s_node_token_raw.content | b64decode | trim }}"
-  delegate_to: "{{ item }}"
-  delegate_facts: true
-  loop: "{{ groups['k8s_workers'] }}"
-
 - name: Wait for control-plane node to register
   ansible.builtin.command: k3s kubectl get node {{ inventory_hostname }}
   register: k3s_node_registered

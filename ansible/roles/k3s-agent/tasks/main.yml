@@ -4,12 +4,19 @@
     path: /usr/local/bin/k3s-agent
   register: k3s_agent_bin
 
+- name: Read node-token from rk1-control
+  ansible.builtin.slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  register: k3s_node_token_raw
+  delegate_to: rk1-control
+  when: not k3s_agent_bin.stat.exists
+
 - name: Install K3s agent
   ansible.builtin.shell: |
     curl -sfL https://get.k3s.io | \
       INSTALL_K3S_VERSION="{{ k3s_version }}" \
       K3S_URL=https://{{ k3s_server_ip }}:6443 \
-      K3S_TOKEN={{ hostvars['rk1-control']['k3s_node_token'] }} \
+      K3S_TOKEN={{ k3s_node_token_raw.content | b64decode | trim }} \
       sh -s - agent \
       --node-ip={{ ansible_host }}
   when: not k3s_agent_bin.stat.exists

@@ -119,7 +119,7 @@ k3s-server:
 .PHONY: k3s-agents
 k3s-agents:
 	ansible-playbook ansible/playbooks/02-kubernetes.yml \
-		-i $(INVENTORY) --limit rk1_workers $(ANSIBLE_ARGS)
+		-i $(INVENTORY) --limit k8s_workers $(ANSIBLE_ARGS)
 
 .PHONY: cilium
 cilium:

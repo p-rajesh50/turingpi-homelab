@@ -485,3 +485,8 @@ Ranked by priority.
 6. **Nvidia Device Plugin + Jetson Exporter** — GPU scheduling and metrics for the standalone
    Jetson Nano once it joins the cluster.
    *Prerequisite:* Jetson Nano JetPack flash + Ansible setup (Step 16).
+
+7. **Local Coding Assistant** — Ollama (Gemma 3 12B) + Open WebUI + Continue.dev VS Code
+   extension. Self-hosted GitHub Copilot alternative with no token limits. New Ansible
+   roles needed: `ollama`, `open-webui`.
+   *Prerequisite:* Jetson Nano configured for faster inference.

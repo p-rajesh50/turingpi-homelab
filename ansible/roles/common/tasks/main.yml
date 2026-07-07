@@ -77,6 +77,15 @@
     name: "{{ locale }}"
     state: present
 
+- name: Disable multipathd (no physical multipath storage here; it grabs Longhorn's
+    iSCSI-backed virtual disks — vendor string "IET" — and locks them, breaking
+    Longhorn volume formatting)
+  ansible.builtin.systemd:
+    name: multipathd
+    enabled: false
+    state: stopped
+    masked: true
+
 - name: Disable swap permanently via systemd (runs before kubelet on every boot)
   ansible.builtin.copy:
     dest: /etc/systemd/system/disable-swap.service

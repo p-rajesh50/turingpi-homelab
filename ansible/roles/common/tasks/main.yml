@@ -75,3 +75,24 @@
   community.general.locale_gen:
     name: "{{ locale }}"
     state: present
+
+- name: Disable swap permanently via systemd (runs before kubelet on every boot)
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/disable-swap.service
+    content: |
+      [Unit]
+      Description=Disable swap permanently for Kubernetes
+      DefaultDependencies=no
+      Before=kubelet.service
+      After=local-fs.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/sbin/swapoff -a
+      ExecStartPost=/bin/bash -c 'rm -f /swapfile /swap.img; sed -i "/swapfile/d;/swap.img/d;/\sswap\s/d" /etc/fstab'
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: "0644"
+  notify: Reload and enable disable-swap unit

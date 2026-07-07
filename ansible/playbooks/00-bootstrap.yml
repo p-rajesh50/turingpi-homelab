@@ -8,6 +8,14 @@
 #     -i ansible/inventory/hosts.yml \
 #     --limit rk1_nodes \
 #     --ask-pass --ask-become-pass
+#
+# ansible_host vs node_static_ip:
+#   A freshly flashed node is still on its DHCP-assigned IP until this playbook applies
+#   Netplan. To reach it for that very first connection, override the connection address:
+#     -e "ansible_host=<current-dhcp-ip>"
+#   Netplan itself is rendered from node_static_ip (hosts.yml), NOT ansible_host, so this
+#   override only affects how Ansible connects right now — it can't accidentally overwrite
+#   the node's permanent static IP.
 
 - name: Bootstrap RK1 nodes
   hosts: rk1_nodes

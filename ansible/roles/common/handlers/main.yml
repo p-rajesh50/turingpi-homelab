@@ -8,3 +8,10 @@
   ansible.builtin.systemd:
     name: fail2ban
     state: restarted
+
+- name: Reload and enable disable-swap unit
+  ansible.builtin.systemd:
+    name: disable-swap
+    daemon_reload: true
+    enabled: true
+    state: started

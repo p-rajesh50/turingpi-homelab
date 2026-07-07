@@ -471,8 +471,10 @@ agent = Agent(
 4. **Secrets** go into Vault via `make secrets`, never hardcoded in files
 5. **Kubeconfig** path is `~/.kube/turingpi-cluster1.conf`
 6. **BMC credentials** are in `~/.turingpi` — source it before BMC commands
-7. **Netplan template** uses `{{ ansible_host }}` (not `{{ node_static_ip }}` — that
-   variable doesn't exist anywhere in this repo)
+7. **Netplan template** uses `{{ node_static_ip }}`, NOT `{{ ansible_host }}` — the two are
+   deliberately decoupled so that a bootstrap-time `-e "ansible_host=<dhcp-ip>"` override
+   (needed to reach a freshly flashed node still on DHCP) can't clobber the static IP that
+   gets written to disk. `node_static_ip` is set per-host in `hosts.yml`.
 8. **Storage devices:** NVMe=`/dev/nvme0n1` (Longhorn, slot 2+4), SATA (NFS, rk1-worker-1
    in slot 2 via mini-PCIe adapter — device path **unverified**, don't assume `/dev/sda2`
    until confirmed with `lsblk`/`fdisk -l` post-reflash)

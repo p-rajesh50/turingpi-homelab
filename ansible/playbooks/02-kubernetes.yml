@@ -11,23 +11,8 @@
   tags: [k8s-prep]
 
   tasks:
-    - name: Disable swap
-      ansible.builtin.command: swapoff -a
-      changed_when: false
-
-    - name: Remove swap from fstab
-      ansible.builtin.replace:
-        path: /etc/fstab
-        regexp: '^([^#].*\s+swap\s+.*)$'
-        replace: '# \1'
-
-    - name: Remove swapfile if present
-      ansible.builtin.shell: |
-        swapoff -a
-        rm -f /swapfile
-        sed -i '/swapfile/d' /etc/fstab
-      changed_when: false
-
+    # Swap is disabled permanently by the common role's disable-swap systemd unit —
+    # no need to repeat that here.
     - name: Load kernel modules
       community.general.modprobe:
         name: "{{ item }}"

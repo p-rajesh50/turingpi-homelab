@@ -10,6 +10,6 @@
   hosts: k8s_control
   become: false
   environment:
-    KUBECONFIG: /etc/kubernetes/admin.conf
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
   roles:
     - role: cloudflare-tunnel

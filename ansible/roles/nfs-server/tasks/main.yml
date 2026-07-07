@@ -1,6 +1,7 @@
 ---
-# Only runs on the node with nfs_server: true (rk1-worker-1, slot 3)
+# Only runs on the node with nfs_server: true (rk1-worker-1, slot 2)
 # /dev/sda2 is a pre-existing ext4 partition (476.4G, labelled "rootfs" from old OS install)
+# Confirmed at this path after the slot 3→2 move via mini-PCIe SATA adapter
 # No partitioning or formatting needed — mount, wipe old OS content, then export via NFS
 
 - name: Skip if not NFS server

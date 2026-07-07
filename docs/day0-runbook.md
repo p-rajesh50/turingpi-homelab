@@ -7,8 +7,8 @@
 - ✅ BMC password changed from default
 - ✅ tpi v1.0.7 installed (on original machine)
 - ⬜ New workstation needs setup
-- ⬜ RK1 nodes need Ubuntu flashed (slots 1, 3, 4)
-- ⬜ Orin NX needs JetPack 7 (slot 2)
+- ⬜ RK1 nodes need Ubuntu flashed (slots 1, 2, 4 — slot 3 is retired/faulty)
+- ⬜ Orin NX deferred indefinitely (module removed from the board)
 - ⬜ Kubernetes cluster not yet deployed
 
 ## Phase 0 — New Workstation Setup ← START HERE
@@ -73,10 +73,10 @@ Applies to all 3 RK1 nodes: UFW, fail2ban, SSH hardening, NTP, packages.
 make kubernetes
 ```
 
-- Installs containerd, kubeadm, kubelet, kubectl on all 3 nodes
-- Initializes control plane on rk1-control (10.0.0.11)
-- Joins rk1-worker-1 and rk1-worker-2
-- Deploys Flannel CNI
+- Installs K3s server on rk1-control (10.0.0.11), with the bundled containerd and
+  kubelet — `--flannel-backend=none` since Cilium replaces Flannel
+- Joins rk1-worker-1 and rk1-worker-2 as K3s agents
+- Installs Cilium CNI
 - Fetches kubeconfig to ~/.kube/turingpi-cluster1.conf
 
 Verify:

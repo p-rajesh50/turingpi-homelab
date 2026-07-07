@@ -84,7 +84,7 @@
       [Unit]
       Description=Disable swap permanently for Kubernetes
       DefaultDependencies=no
-      Before=kubelet.service
+      Before=k3s.service k3s-agent.service
       After=local-fs.target
 
       [Service]

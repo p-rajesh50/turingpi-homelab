@@ -9,7 +9,6 @@
 #   grafana.kloud-worx.com    → Grafana monitoring
 #   jupyter.kloud-worx.com    → JupyterHub
 #   gitea.kloud-worx.com      → Gitea self-hosted Git
-#   llm.kloud-worx.com        → Open WebUI (chat with local models)
 #   litellm.kloud-worx.com    → LiteLLM API gateway
 #   minio.kloud-worx.com      → MinIO S3 console
 #   headlamp.kloud-worx.com   → Headlamp K8s UI
@@ -67,9 +66,9 @@
             - hostname: gitea.kloud-worx.com
               service: http://gitea-http.gitea.svc.cluster.local:3000
 
-            # Open WebUI — chat with local LLMs remotely
-            - hostname: llm.kloud-worx.com
-              service: http://{{ node_ips.orin_nx }}:{{ open_webui_port }}
+            # Open WebUI — DEFERRED, Orin NX module removed from the board (see
+            # CLAUDE.md Hardware section). Re-add the llm.kloud-worx.com route
+            # here once Orin NX is reinstalled and Open WebUI is deployed.
 
             # LiteLLM AI Gateway API
             - hostname: litellm.kloud-worx.com
@@ -160,7 +159,6 @@
       - "  https://grafana.kloud-worx.com    ← Grafana"
       - "  https://jupyter.kloud-worx.com    ← JupyterHub"
       - "  https://gitea.kloud-worx.com      ← Gitea"
-      - "  https://llm.kloud-worx.com        ← Open WebUI"
       - "  https://litellm.kloud-worx.com    ← LiteLLM API"
       - "  https://minio.kloud-worx.com      ← MinIO Console"
       - "  https://prefect.kloud-worx.com    ← Prefect UI"

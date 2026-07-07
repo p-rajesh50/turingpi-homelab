@@ -20,14 +20,14 @@ agentic app runtime, secrets management, and remote access.
 
 ## Hardware
 
-### Cluster 1 — TuringPi 2.5 (PRIMARY — currently being built)
+### Cluster 1 — TuringPi 2.5 (PRIMARY — K3s+Cilium live, storage live)
 
 | Device | Hostname | IP | Slot | Status |
 |---|---|---|---|---|
 | BMC | tpi1-bmc | 10.0.0.10 | — | ✅ Static IP configured |
-| RK1 | rk1-control | 10.0.0.11 | 1 | ✅ Ubuntu 22.04, static IP, hardened |
-| RK1 | rk1-worker-1 | 10.0.0.12 | 2 | ✅ Ubuntu 22.04, static IP, hardened (moved from slot 3 after hardware fault; NFS SATA SSD re-homed via mini-PCIe adapter, device path unverified) |
-| RK1 | rk1-worker-2 | 10.0.0.13 | 4 | ✅ Ubuntu 22.04, static IP, hardened |
+| RK1 | rk1-control | 10.0.0.11 | 1 | ✅ K3s control-plane, Ready |
+| RK1 | rk1-worker-1 | 10.0.0.12 | 2 | ✅ K3s agent, Ready (moved from slot 3 after hardware fault; NFS SATA SSD re-homed via mini-PCIe adapter, device path confirmed `/dev/sda2`) |
+| RK1 | rk1-worker-2 | 10.0.0.13 | 4 | ✅ K3s agent, Ready |
 | — | (slot 3) | — | 3 | ⛔ EMPTY / FAULTY — RK1 NIC/switch-silicon fault, never assign a node here |
 
 > **Orin NX module removed from the board entirely** (was slot 2) — Jetson Orin setup
@@ -64,7 +64,7 @@ agentic app runtime, secrets management, and remote access.
 10.0.0.5          TrueNAS (future)
 10.0.0.10         Cluster 1 BMC (tpi1-bmc)
 10.0.0.11         rk1-control  (slot 1)
-10.0.0.12         rk1-worker-1 (slot 2, moved from slot 3) — also NFS server (mini-PCIe SATA adapter, path unverified)
+10.0.0.12         rk1-worker-1 (slot 2, moved from slot 3) — also NFS server (mini-PCIe SATA adapter, path confirmed /dev/sda2)
 10.0.0.13         rk1-worker-2 (slot 4)
                   slot 3 — EMPTY / FAULTY, never assign a node here
 10.0.0.15         jetson-nano  (standalone)
@@ -78,22 +78,22 @@ agentic app runtime, secrets management, and remote access.
 
 ## Build Order (overall project)
 
-> ⚠️ **REBUILD IN PROGRESS** — a hardware fault at slot 3 forced a physical rework
-> (rk1-worker-1 moved to slot 2, Orin NX removed, slot 3 retired). Taking this as an
-> opportunity to also replace kubeadm+Flannel with K3s+Cilium. Steps 6 and 8 below are
-> reset to reflect the in-progress rebuild; a full data wipe (Vault/Gitea/Longhorn/MinIO)
-> was accepted, so steps 9-14 will need to be re-run against the new cluster even though
-> the roles themselves aren't changing.
+> **Rebuild complete.** A hardware fault at slot 3 forced a physical rework
+> (rk1-worker-1 moved to slot 2, Orin NX removed, slot 3 retired), taken as an
+> opportunity to also replace kubeadm+Flannel with K3s+Cilium. The new cluster is
+> live, storage is deployed and verified — see `SESSION-HANDOFF.md` for the full
+> session log. A full data wipe (Vault/Gitea/Longhorn/MinIO) was accepted, so steps
+> 9-14 below still need to be run fresh against the new cluster.
 
 1. ✅ Cluster 1 — Workstation setup
 2. ✅ Cluster 1 — BMC static IP + credentials
 3. ✅ Cluster 1 — Flash Ubuntu 22.04 on RK1 nodes (originally slots 1, 3, 4 — module now in slot 2)
 4. ✅ Cluster 1 — Bootstrap (SSH keys, hostnames, static IPs)
 5. ✅ Cluster 1 — Common hardening (UFW, fail2ban, NTP, packages)
-6. ⬜ Cluster 1 — K3s cluster (server + agents)   ← NEXT STEP
-7. ⬜ Cluster 1 — Storage (Longhorn + NFS + MinIO) — re-run after rebuild; verify NFS SATA device path first (see Storage Architecture note)
-7b. ⬜ Cluster 1 — Longhorn NVMe migration
-8. ⬜ Cluster 1 — Cluster add-ons incl. Cilium CNI (MetalLB, ingress, Prometheus)
+6. ✅ Cluster 1 — K3s cluster (server + agents + Cilium CNI)
+7. ✅ Cluster 1 — Storage (Longhorn + NFS + MinIO) — device path confirmed `/dev/sda2`
+7b. ✅ Cluster 1 — Longhorn NVMe migration
+8. ⬜ Cluster 1 — Cluster add-ons (MetalLB, ingress, Prometheus/Grafana)   ← NEXT STEP
 9. ⬜ Cluster 1 — Vault + External Secrets Operator — re-run, data wiped
 10. ⬜ Cluster 1 — Secrets setup (API keys into Vault) — re-enter via `make secrets`
 11. ⬜ Cluster 1 — AI stack (LiteLLM; Qdrant/JupyterHub/LangGraph/Prefect still stub roles)
@@ -126,6 +126,7 @@ turingpi-homelab/
 │   │   ├── 02-kubernetes.yml              ← make k3s-server / make k3s-agents
 │   │   ├── 02b-cilium.yml                 ← make cilium
 │   │   ├── 03-storage.yml                 ← make storage
+│   │   ├── 03b-longhorn-nvme.yml          ← make longhorn-nvme
 │   │   ├── 04-cluster-addons.yml          ← make addons
 │   │   ├── 05-ai-stack.yml                ← make ai-stack
 │   │   ├── 06-dev-tools.yml               ← make dev-tools
@@ -231,7 +232,7 @@ tpi --host $BMC_IP --user $BMC_USER --password $BMC_PASSWORD power off --node 1
 | Storage | Device | Mount | StorageClass | Used For |
 |---|---|---|---|---|
 | Longhorn | /dev/nvme0n1 on rk1-worker-1 + rk1-worker-2 | /var/lib/longhorn-nvme | longhorn (default) | Databases, stateful apps — replicated |
-| NFS | SSD on rk1-worker-1 (slot 2, 476.4G) via mini-PCIe SATA adapter — **device path unverified**, confirm with `lsblk`/`fdisk -l` before `make storage`; may not still be `/dev/sda2` | /mnt/sata → /mnt/sata/k8s | nfs-shared | Shared files, ML models, artifacts |
+| NFS | SSD on rk1-worker-1 (slot 2, 476.4G) via mini-PCIe SATA adapter — device path confirmed `/dev/sda2` | /mnt/sata → /mnt/sata/k8s | nfs-shared | Shared files, ML models, artifacts |
 | MinIO | Longhorn PVC 200Gi | — | — | S3-compatible object storage |
 
 ---
@@ -394,44 +395,21 @@ make health
 
 ## Current State Summary
 
-As of the last session: **mid-rebuild.** A hardware fault localized to slot 3 (confirmed via
-live incident investigation — kernel-level ICMP counters on rk1-worker-1 proved the node's own
-stack was healthy, so the packet loss was in transit, pointing to the RK1 module's NIC/PHY or
-the TuringPi board's slot-3 switch silicon) forced a physical rework:
+The K3s+Cilium rebuild (triggered by a slot-3 hardware fault — rk1-worker-1 moved to
+slot 2, Orin NX removed from the board, slot 3 retired) is complete and verified:
+all 3 nodes `Ready`, Cilium healthy, cross-node pod connectivity confirmed. Storage
+(Longhorn NVMe-backed on rk1-worker-1/rk1-worker-2, NFS on rk1-worker-1 at confirmed
+`/dev/sda2`, MinIO) is deployed and verified healthy. A full data wipe of the
+previous cluster's Vault secrets, Gitea repos, Longhorn volumes, and MinIO data was
+accepted as part of the migration — no backup was taken.
 
-- rk1-worker-1's RK1 module moved from slot 3 → slot 2.
-- Slot 3 retired — empty, never to be assigned a node again.
-- Orin NX module removed from the board entirely (was slot 2) — Step 15 deferred indefinitely.
-- NFS SATA SSD being re-homed via a mini-PCIe SATA adapter card in slot 2 — **unverified**,
-  node 2 was still being reflashed as of this writing; confirm device path before `make storage`.
+Full session-by-session detail (bugs found and fixed, verification steps run) lives
+in `SESSION-HANDOFF.md` — treat that file as the authoritative running log and this
+section as a short current-state summary only.
 
-Taking the rebuild as an opportunity to also replace kubeadm+Flannel with K3s+Cilium
-(`ansible/roles/k3s-server`, `ansible/roles/k3s-agent`, `ansible/playbooks/02b-cilium.yml`).
-A full data wipe was accepted — no backup was taken of the previous cluster's Vault secrets,
-Gitea repos, Longhorn volumes, or MinIO data before rebuilding.
-
-**Still valid from before the rebuild (not being redone):**
-- BMC configured with static IP 10.0.0.10, password changed
-- tpi v1.0.7 installed on WSL workstation, all credentials in ~/.turingpi
-- SSH key-based auth working on all 3 RK1 nodes; common hardening applied (UFW, fail2ban,
-  SSH hardening, NTP)
-- Repo at github.com/p-rajesh50/turingpi-homelab
-
-**Reset by the rebuild (need to be re-run from scratch against the new cluster):**
-- Kubernetes: was kubeadm 1.30.14 + Flannel — now being rebuilt as K3s + Cilium (Steps 6, 8)
-- Storage (Longhorn/NFS/MinIO), Vault + ESO, secrets, AI stack, dev tools (Gitea), Tailscale,
-  Cloudflare Tunnel — all previously complete (Steps 7, 9-14) but wiped along with the old
-  cluster; re-run in order once the new K3s+Cilium cluster is verified healthy
-- ~/.vault-init.json from the old cluster is stale once Vault is reinitialized — a fresh one
-  will be generated by `make vault`; back up the new one once created
-- Manual Tailscale follow-ups (key-expiry disable, subnet-route approval in the admin console)
-  will need to be redone once Tailscale is redeployed
-
-**Next immediate step:**
-Verify rk1-worker-1 comes up cleanly in slot 2 (`make bootstrap`, `make common`), then
-`make kubernetes` (K3s server → agents → Cilium). Confirm `kubectl get nodes` shows all 3
-Ready and `cilium status` is clean before checking the NFS SATA device path and proceeding
-to `make storage`.
+**Next step:** `make addons` (MetalLB, ingress-nginx, Prometheus/Grafana, Dashboard),
+then continue in order: `make vault` → `make secrets` → `make ai-stack` →
+`make dev-tools` → `make tailscale` → `make cloudflare`.
 
 ---
 
@@ -476,8 +454,7 @@ agent = Agent(
    (needed to reach a freshly flashed node still on DHCP) can't clobber the static IP that
    gets written to disk. `node_static_ip` is set per-host in `hosts.yml`.
 8. **Storage devices:** NVMe=`/dev/nvme0n1` (Longhorn, slot 2+4), SATA (NFS, rk1-worker-1
-   in slot 2 via mini-PCIe adapter — device path **unverified**, don't assume `/dev/sda2`
-   until confirmed with `lsblk`/`fdisk -l` post-reflash)
+   in slot 2 via mini-PCIe adapter — device path confirmed `/dev/sda2`)
 
 ---
 

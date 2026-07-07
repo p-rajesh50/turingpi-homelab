@@ -74,26 +74,9 @@
       data:
         config.yaml: |
           model_list:
-            # ── Local models via Orin NX (free, private) ──────────────────
-            - model_name: gemma3
-              litellm_params:
-                model: ollama/gemma3:12b
-                api_base: http://{{ node_ips.orin_nx }}:{{ ollama_port }}
-
-            - model_name: mistral
-              litellm_params:
-                model: ollama/mistral
-                api_base: http://{{ node_ips.orin_nx }}:{{ ollama_port }}
-
-            - model_name: openchat
-              litellm_params:
-                model: ollama/openchat
-                api_base: http://{{ node_ips.orin_nx }}:{{ ollama_port }}
-
-            - model_name: nomic-embed-text
-              litellm_params:
-                model: ollama/nomic-embed-text
-                api_base: http://{{ node_ips.orin_nx }}:{{ ollama_port }}
+            # ── Local models via Orin NX — DEFERRED, module removed from the
+            # board (see CLAUDE.md Hardware section). Re-add gemma3/mistral/
+            # openchat/nomic-embed-text routes here once Orin NX is reinstalled.
 
             # ── Embedding via Jetson Nano (offloads from Orin NX) ─────────
             - model_name: all-minilm
@@ -214,5 +197,5 @@
     msg:
       - "LiteLLM Gateway: http://{{ litellm_service_ip }}/v1"
       - "OpenAI-compatible endpoint for all your apps and agents"
-      - "Models available: gemma3, mistral, openchat, claude-sonnet, claude-opus, gemini-pro, gemini-flash"
+      - "Models available: all-minilm, phi3-mini (Jetson Nano), claude-sonnet, claude-opus, gemini-pro, gemini-flash"
       - "Run 'make secrets' to configure your Anthropic and Gemini API keys"

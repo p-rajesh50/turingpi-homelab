@@ -89,6 +89,38 @@
         --wait --timeout 10m
       changed_when: true
 
+    - name: Create Headlamp admin RBAC (ServiceAccount is idempotent-created here
+        so a reinstall doesn't silently drop it; ClusterRoleBinding grants the
+        metrics.k8s.io permissions the cluster-admin binding alone doesn't cover,
+        fixing the 403 on /apis/metrics.k8s.io/v1beta1/nodes)
+      ansible.builtin.copy:
+        dest: /tmp/headlamp-admin-rbac.yml
+        mode: "0644"
+        content: |
+          ---
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: headlamp-admin
+            namespace: headlamp
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: headlamp-admin-metrics-reader
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: system:aggregated-metrics-reader
+          subjects:
+            - kind: ServiceAccount
+              name: headlamp-admin
+              namespace: headlamp
+
+    - name: Apply Headlamp admin RBAC
+      ansible.builtin.command: kubectl apply -f /tmp/headlamp-admin-rbac.yml
+      changed_when: true
+
     # ── Portainer ─────────────────────────────────────────────────────────────
     # Note: the portainer/portainer chart has no service.loadBalancerIP values
     # key — MetalLB IP is pinned via the metallb.io/loadBalancerIPs annotation.

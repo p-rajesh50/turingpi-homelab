@@ -40,6 +40,14 @@
     rule: allow
     src: "{{ cluster_subnet }}"
 
+- name: Allow pod-network traffic (same-node kubelet self-scrape — pod-to-host
+    traffic isn't masqueraded to a LAN IP the way cross-node traffic is, so it
+    needs its own allow rule for the pod CIDR; without this, metrics-server
+    times out scraping whichever node it happens to be scheduled on)
+  community.general.ufw:
+    rule: allow
+    src: "{{ pod_cidr }}"
+
 - name: Deploy fail2ban config
   ansible.builtin.copy:
     dest: /etc/fail2ban/jail.local

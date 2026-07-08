@@ -48,6 +48,9 @@ help:
 	@echo "    make teardown         Reset K8s on all nodes (keeps OS)"
 	@echo "    make teardown-hard    Reset K8s + power off all nodes"
 	@echo "    make update           apt upgrade all nodes"
+	@echo "    make cluster-shutdown Graceful whole-cluster shutdown (drain + power off)"
+	@echo "    make cluster-startup  Graceful whole-cluster startup (power on + verify)"
+	@echo "    make cluster-health   Extended health check (swap, eMMC, MetalLB, Longhorn)"
 	@echo ""
 	@echo "  BMC / POWER"
 	@echo "    make power-status     Show all node power states"
@@ -198,6 +201,18 @@ teardown-hard:
 update:
 	ansible all -i $(INVENTORY) -m apt \
 		-a "upgrade=dist update_cache=yes" --become $(ANSIBLE_ARGS)
+
+.PHONY: cluster-shutdown
+cluster-shutdown:
+	@bash scripts/maintenance/cluster-lifecycle.sh shutdown
+
+.PHONY: cluster-startup
+cluster-startup:
+	@bash scripts/maintenance/cluster-lifecycle.sh startup
+
+.PHONY: cluster-health
+cluster-health:
+	@bash scripts/maintenance/cluster-lifecycle.sh health-check
 
 # ─────────────────────────────────────────────────────────────────────────────
 # BMC / POWER

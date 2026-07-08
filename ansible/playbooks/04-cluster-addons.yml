@@ -89,10 +89,13 @@
         --wait --timeout 10m
       changed_when: true
 
-    - name: Create Headlamp admin RBAC (ServiceAccount is idempotent-created here
-        so a reinstall doesn't silently drop it; ClusterRoleBinding grants the
-        metrics.k8s.io permissions the cluster-admin binding alone doesn't cover,
-        fixing the 403 on /apis/metrics.k8s.io/v1beta1/nodes)
+    # ServiceAccount + cluster-admin binding used to log into the Headlamp UI
+    # with a token (separate from the chart's own default "headlamp" SA, which
+    # the running pod uses and which must NOT be the login identity — binding
+    # cluster-admin to the wrong SA here previously caused a CRD-list 403 even
+    # though "cluster-admin" appeared to be granted). The metrics-reader
+    # binding is redundant under cluster-admin but kept for clarity.
+    - name: Create Headlamp admin RBAC
       ansible.builtin.copy:
         dest: /tmp/headlamp-admin-rbac.yml
         mode: "0644"
@@ -103,6 +106,19 @@
           metadata:
             name: headlamp-admin
             namespace: headlamp
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: headlamp-admin
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: cluster-admin
+          subjects:
+            - kind: ServiceAccount
+              name: headlamp-admin
+              namespace: headlamp
           ---
           apiVersion: rbac.authorization.k8s.io/v1
           kind: ClusterRoleBinding

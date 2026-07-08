@@ -34,9 +34,13 @@ This is the first time the full stack has been live simultaneously since the
 K3s+Cilium rebuild began.
 
 **Since that handoff (same day, new session):** metrics-server, Headlamp RBAC
-(two separate bugs), and eMMC space on all 3 nodes have all been fixed and
-verified. See "Post-Handoff Fixes" below — the eMMC urgency flagged in the
-previous version of this doc is resolved.
+(two separate bugs), eMMC space on all 3 nodes, `health-check.sh`, and a new
+`cluster-lifecycle.sh` (shutdown/startup/health-check) have all been fixed,
+written, and verified. See "Post-Handoff Fixes" below — the eMMC urgency
+flagged in the previous version of this doc is resolved. **Next up:** a real
+(not dry-run) shutdown/startup cycle to validate the new lifecycle script,
+plus two new planned chunks — an operational runbook and Prometheus
+alerting rules (see Follow-Ups).
 
 ---
 
@@ -262,6 +266,37 @@ Unrelated latent bug found while running `make health` to verify the above:
 for Services on this kubectl/K8s version. Switched to client-side `awk`
 filtering on the TYPE column. `make health` now exits 0 cleanly.
 
+### `cluster-lifecycle.sh` added, `commit fcd94d5`
+
+New `scripts/maintenance/cluster-lifecycle.sh` with three modes:
+`shutdown` (cordon workers→control, drain workers, verify no Terminating
+pods/detached Longhorn volumes/no Failed PVCs, stop k3s-agent/k3s via SSH,
+BMC power off in order slot 4→2→1, confirm all off), `startup` (BMC power on
+slot 1 then 2/4, wait for SSH + `Ready` + system pods + healthy Longhorn +
+Bound PVCs, uncordon, final pod sweep), and `health-check` (superset of
+`health-check.sh` — adds swap/eMMC/MetalLB pool checks). All three support
+`--dry-run`. New Makefile targets: `make cluster-shutdown`,
+`make cluster-startup`, `make cluster-health`.
+
+Two bugs found and fixed during testing, before commit:
+- `shutdown --dry-run` originally polled real cluster state (Longhorn
+  detached, no Terminating pods) that can only pass after a real drain —
+  since dry-run skips the drain, it hung for the full timeout every time.
+  Fixed to describe those checks instead of blocking on them under
+  `--dry-run`.
+- The step-logger was printing the BMC password in plaintext (`tpi ...
+  --password <plaintext> ...`) whenever a `tpi` command ran or was
+  dry-run-previewed. Added a `redact()` helper so the password never
+  appears in output.
+
+**Tested live**: `shutdown --dry-run` — correct sequencing confirmed,
+password redacted. `health-check` (both directly and via `make
+cluster-health`) — passes cleanly against the live cluster, matching all the
+Post-Handoff Fixes numbers above (46%/22%/35% eMMC, MetalLB 7/20 IPs used,
+swap disabled on all 3 nodes). **Real `shutdown`/`startup` has NOT been run
+yet** — that's a live power-cycle of the whole cluster, deliberately left
+for a dedicated follow-up session (see Follow-Ups below).
+
 ---
 
 ## Workstation Setup (parani-laptop)
@@ -331,7 +366,8 @@ rk1-control: 100.96.0.102 (subnet router, advertises 10.0.0.0/24,
 │       ├── cloudflare-tunnel/   ← live, tagged tunnel/credentials/dns/access
 │       └── gitea/               ← live
 ├── scripts/maintenance/
-│   ├── health-check.sh
+│   ├── health-check.sh          ← basic check, fixed Services field-selector bug
+│   ├── cluster-lifecycle.sh     ← shutdown/startup/health-check, --dry-run — NEW
 │   └── teardown.sh              ← K3s-native (k3s-uninstall.sh), not kubeadm
 └── kubernetes/helm-values/prometheus-stack.yml  ← Grafana existingSecret + Recreate strategy
 ```
@@ -375,21 +411,37 @@ http://10.0.0.40/v1   LiteLLM        http://10.0.0.35       MinIO
    LiteLLM UI currently returns "not connected to DB" (spend tracking, user/team
    management unavailable without it). Tracked as item 8 in CLAUDE.md's Future
    Enhancements Backlog.
-4. **Implement `cluster-lifecycle.sh`** — a graceful shutdown/startup script
-   (doesn't exist yet — checked `scripts/maintenance/`, only `health-check.sh`
-   and `teardown.sh` currently exist). Needed for safely power-cycling the whole
-   cluster (e.g., before a house power outage) without leaving Longhorn
-   volumes/etcd in a bad state.
-5. **See `CLAUDE.md`'s Future Enhancements Backlog** for the full ranked list
+4. ~~Implement `cluster-lifecycle.sh`~~ **RESOLVED** — see "Post-Handoff
+   Fixes" above. Written, tested (`--dry-run` + real `health-check`),
+   committed (`fcd94d5`). **Not yet run for real** — next session should do a
+   real `make cluster-shutdown` → `make cluster-startup` cycle against the
+   live cluster to validate it end-to-end (the `--dry-run` test only proved
+   the command sequencing, not that a real drain/power-cycle/rejoin actually
+   works). Treat the first real run as a supervised test, not routine
+   maintenance, in case anything needs adjusting.
+5. **Chunk 3 — operational runbook (`docs/runbook.md`)**: not started.
+   Should cover day-to-day operations (how to check health, how to shut
+   down/start up safely, how to rotate secrets, common failure modes and
+   their fixes) as a human-readable companion to `CLAUDE.md`/this handoff
+   doc — pull from the "Key Learnings" section below, which already has most
+   of the raw material.
+6. **Chunk 4 — Prometheus alerting rules**: not started. `kube-prometheus-stack`
+   is deployed (`kubernetes/helm-values/prometheus-stack.yml`) but has no
+   custom `PrometheusRule` resources yet — only whatever default rules the
+   chart ships with. Worth adding rules for the failure modes already hit
+   this session: eMMC >70% (now checked ad hoc by `cluster-lifecycle.sh
+   health-check`, should also page/alert), Longhorn volume not `healthy`,
+   node `NotReady`, PVC `Failed`/`Lost`.
+7. **See `CLAUDE.md`'s Future Enhancements Backlog** for the full ranked list
    (ArgoCD, RK1 NPU device plugin, Loki, Flyte, Chroma, Nvidia device plugin +
    Jetson exporter, Local Coding Assistant, PostgreSQL for LiteLLM).
-6. **rk1-control's 2 Longhorn replicas are still on its eMMC disk** (not
+8. **rk1-control's 2 Longhorn replicas are still on its eMMC disk** (not
    NVMe — it has none). Not urgent (46% usage, healthy), but if the
    control-plane should have zero Longhorn footprint per the storage
    architecture, this needs a real fix: chase down the `/var/log/instances`
    race in Longhorn's `instance-manager` (see "Post-Handoff Fixes" above)
    before attempting eviction again — that bug blocked it this session.
-7. **rk1-control has a physically present but unpartitioned/unmounted NVMe**
+9. **rk1-control has a physically present but unpartitioned/unmounted NVMe**
    (`/dev/nvme0n1`, ~954G). Not used for anything today. If it's ever needed
    (e.g. to move `/var/lib/rancher` off rk1-control's eMMC too), it needs
    partitioning and formatting first — that's a new, separate piece of work,
@@ -533,9 +585,12 @@ from where we left off.
 Current state: the full stack is live and verified end-to-end (K3s+Cilium,
 storage, addons, Vault/secrets, AI stack, dev tools, Tailscale control-plane-only,
 Cloudflare Tunnel with Google OAuth). metrics-server, Headlamp RBAC (two
-separate bugs), and eMMC space on all 3 nodes were fixed in a same-day
-follow-up session — see "Post-Handoff Fixes" above. See "Follow-Up Items for
-Future Sessions" for what's next — nothing urgent right now; real API keys
-for Vault and the deferred Longhorn eviction bug on rk1-control are the main
-open items.
+separate bugs), eMMC space on all 3 nodes, and a new cluster-lifecycle.sh
+script were all fixed/added in a same-day follow-up session — see
+"Post-Handoff Fixes" above. Nothing urgent right now. Next steps, in
+priority order: (1) run a real make cluster-shutdown / make cluster-startup
+cycle to validate the new lifecycle script against the live cluster (only
+--dry-run and health-check have been tested so far), (2) write
+docs/runbook.md (operational runbook), (3) add Prometheus alerting rules.
+See "Follow-Up Items for Future Sessions" for full detail.
 ```

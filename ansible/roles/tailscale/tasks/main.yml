@@ -6,6 +6,9 @@
 #
 # PREREQUISITE: TAILSCALE_AUTH_KEY must be stored in Vault:
 #   vault kv put secret/tailscale AUTH_KEY="tskey-auth-..."
+# The key MUST be reusable, not single-use — this same key is used for
+# `tailscale up` on all 3 nodes within one playbook run, so a single-use key
+# would leave 2 of 3 nodes unable to connect.
 
 - name: Add Tailscale apt repo key
   ansible.builtin.shell: |
@@ -57,7 +60,7 @@
     --hostname={{ inventory_hostname }}
     --accept-routes
     {% if inventory_hostname == 'rk1-control' %}
-    --advertise-routes=10.0.0.0/24
+    --advertise-routes=10.0.0.0/24 --snat-subnet-routes=false
     {% endif %}
   when: (tailscale_status.stdout | from_json).BackendState != 'Running'
   changed_when: true

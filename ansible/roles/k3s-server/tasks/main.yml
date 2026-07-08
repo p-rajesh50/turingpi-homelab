@@ -1,4 +1,38 @@
 ---
+- name: Check if Longhorn NVMe mount is present (control-plane doesn't get one by
+    design — this task set safely no-ops there)
+  ansible.builtin.stat:
+    path: /var/lib/longhorn-nvme
+  register: longhorn_nvme_mount
+
+- name: Check for pre-existing /var/lib/containerd and /var/lib/rancher
+  ansible.builtin.stat:
+    path: "/var/lib/{{ item }}"
+  loop: [containerd, rancher]
+  register: k3s_data_dirs
+
+- name: Create NVMe-backed containerd/rancher directories (only when NVMe is
+    already mounted and K3s hasn't written real data to eMMC yet)
+  ansible.builtin.file:
+    path: "/var/lib/longhorn-nvme/{{ item.item }}"
+    state: directory
+    mode: "0711"
+  loop: "{{ k3s_data_dirs.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: longhorn_nvme_mount.stat.exists and longhorn_nvme_mount.stat.isdir and not item.stat.exists
+
+- name: Symlink /var/lib/containerd and /var/lib/rancher to NVMe before K3s
+    installs, so a fresh install writes there directly instead of the eMMC
+  ansible.builtin.file:
+    src: "/var/lib/longhorn-nvme/{{ item.item }}"
+    dest: "/var/lib/{{ item.item }}"
+    state: link
+  loop: "{{ k3s_data_dirs.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: longhorn_nvme_mount.stat.exists and longhorn_nvme_mount.stat.isdir and not item.stat.exists
+
 - name: Install K3s server
   ansible.builtin.shell: |
     curl -sfL https://get.k3s.io | \

@@ -94,6 +94,27 @@
     state: stopped
     masked: true
 
+- name: Check for leftover standalone containerd.service (from the old kubeadm
+    cluster; K3s embeds its own containerd and never uses this one)
+  ansible.builtin.stat:
+    path: /lib/systemd/system/containerd.service
+  register: leftover_containerd_service
+
+- name: Disable and mask leftover containerd.service
+  ansible.builtin.systemd:
+    name: containerd
+    enabled: false
+    state: stopped
+    masked: true
+  when: leftover_containerd_service.stat.exists
+
+- name: Remove leftover containerd data directory (K3s embeds its own containerd
+    under /var/lib/rancher/k3s/... — this top-level dir is pure kubeadm-era cruft)
+  ansible.builtin.file:
+    path: /var/lib/containerd
+    state: absent
+  when: leftover_containerd_service.stat.exists
+
 - name: Disable swap permanently via systemd (runs before kubelet on every boot)
   ansible.builtin.copy:
     dest: /etc/systemd/system/disable-swap.service

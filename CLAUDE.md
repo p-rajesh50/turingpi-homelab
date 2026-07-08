@@ -497,3 +497,8 @@ Ranked by priority.
    extension. Self-hosted GitHub Copilot alternative with no token limits. New Ansible
    roles needed: `ollama`, `open-webui`.
    *Prerequisite:* Jetson Nano configured for faster inference.
+
+8. **PostgreSQL for LiteLLM** — deploy PostgreSQL (Bitnami Helm chart, Longhorn PVC) and
+   connect LiteLLM to it to enable the LiteLLM UI (spend tracking, user management, team
+   management). LiteLLM UI currently returns a "not connected to DB" error.
+   *Prerequisite:* Longhorn storage working (done).

@@ -29,6 +29,7 @@
   changed_when: true
   environment:
     KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  tags: [tunnel]
 
 - name: Deploy cloudflared tunnel config
   ansible.builtin.copy:
@@ -144,12 +145,14 @@
               - name: config
                 configMap:
                   name: cloudflared-config
+  tags: [tunnel]
 
 - name: Apply cloudflared deployment
   ansible.builtin.command: kubectl apply -f /tmp/cloudflared.yml
   changed_when: true
   environment:
     KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  tags: [tunnel]
 
 - name: Print Cloudflare Tunnel summary
   ansible.builtin.debug:
@@ -165,6 +168,7 @@
       - "  https://headlamp.kloud-worx.com   ← Headlamp K8s UI"
       - "  https://portainer.kloud-worx.com  ← Portainer multi-cluster UI"
       - "All protected by Cloudflare Access (Google OAuth login required)"
+  tags: [tunnel]
 
 # --- Cloudflare API credentials (shared by DNS + Access sections below) ---
 
@@ -200,12 +204,14 @@
             remoteRef:
               key: secret/cloudflare
               property: ZONE_ID
+  tags: [credentials]
 
 - name: Apply cloudflare-api-credentials ExternalSecret
   ansible.builtin.command: kubectl apply -f /tmp/cloudflare-api-external-secret.yml
   changed_when: true
   environment:
     KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  tags: [credentials]
 
 - name: Wait for cloudflare-api-credentials secret to sync from Vault
   ansible.builtin.command: >
@@ -214,6 +220,7 @@
   changed_when: false
   environment:
     KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  tags: [credentials]
 
 - name: Read Cloudflare API token from synced secret
   ansible.builtin.shell: >
@@ -226,6 +233,7 @@
   no_log: true
   environment:
     KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  tags: [credentials]
 
 - name: Read Cloudflare Account ID from synced secret
   ansible.builtin.shell: >
@@ -237,6 +245,7 @@
   changed_when: false
   environment:
     KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  tags: [credentials]
 
 - name: Read Cloudflare Zone ID from synced secret
   ansible.builtin.shell: >
@@ -248,6 +257,7 @@
   changed_when: false
   environment:
     KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  tags: [credentials]
 
 - name: Set Cloudflare API facts
   ansible.builtin.set_fact:
@@ -255,6 +265,7 @@
     cf_account_id: "{{ cf_account_id_raw.stdout }}"
     cf_zone_id: "{{ cf_zone_id_raw.stdout }}"
   no_log: true
+  tags: [credentials]
 
 # --- Cloudflare DNS records ---
 # Points each tunnel hostname at the tunnel via a proxied CNAME.
@@ -263,6 +274,7 @@
   ansible.builtin.debug:
     msg:
       - "PREREQUISITE: the Cloudflare API token must also have Zone > DNS > Edit permission (scoped to kloud-worx.com)."
+  tags: [dns]
 
 - name: Look up Cloudflare Tunnel ID
   ansible.builtin.uri:
@@ -273,10 +285,12 @@
     status_code: [200]
   register: cf_tunnels
   no_log: true
+  tags: [dns]
 
 - name: Resolve Cloudflare Tunnel ID matches
   ansible.builtin.set_fact:
     cf_tunnel_matches: "{{ cf_tunnels.json.result | selectattr('name', 'equalto', cloudflare_tunnel_name) | list }}"
+  tags: [dns]
 
 - name: Assert Cloudflare Tunnel was found
   ansible.builtin.assert:
@@ -285,10 +299,12 @@
     fail_msg: >-
       No Cloudflare Tunnel named '{{ cloudflare_tunnel_name }}' found in this account.
       Check cloudflare_tunnel_name matches the tunnel's actual name in Cloudflare.
+  tags: [dns]
 
 - name: Set Cloudflare Tunnel ID fact
   ansible.builtin.set_fact:
     cf_tunnel_id: "{{ cf_tunnel_matches[0].id }}"
+  tags: [dns]
 
 - name: Look up existing DNS records
   ansible.builtin.uri:
@@ -299,12 +315,14 @@
     status_code: [200]
   register: cf_all_dns_records
   no_log: true
+  tags: [dns]
 
 - name: Provision CNAME record for each tunnel hostname
   ansible.builtin.include_tasks: dns-record.yml
   loop: "{{ cloudflare_tunnel_hostnames }}"
   loop_control:
     loop_var: cf_hostname
+  tags: [dns]
 
 # --- Cloudflare Access (Zero Trust) ---
 # This section only wires up Access Applications/Policies for the hostnames
@@ -316,6 +334,7 @@
     msg:
       - "PREREQUISITE: Google IdP must be configured in Cloudflare Zero Trust before running this playbook."
       - "Team domain: {{ cloudflare_zero_trust_team_domain }}"
+  tags: [access]
 
 - name: Look up Cloudflare Zero Trust identity providers
   ansible.builtin.uri:
@@ -326,10 +345,12 @@
     status_code: [200]
   register: cf_idps
   no_log: true
+  tags: [access]
 
 - name: Resolve Google IdP ID
   ansible.builtin.set_fact:
     cf_google_idp_matches: "{{ cf_idps.json.result | selectattr('name', 'equalto', cloudflare_access_idp_name) | list }}"
+  tags: [access]
 
 - name: Assert Google IdP was found
   ansible.builtin.assert:
@@ -339,10 +360,12 @@
       No identity provider named '{{ cloudflare_access_idp_name }}' found in
       Cloudflare Zero Trust. Configure it first at
       https://{{ cloudflare_zero_trust_team_domain }}.
+  tags: [access]
 
 - name: Set Google IdP ID fact
   ansible.builtin.set_fact:
     cf_google_idp_id: "{{ cf_google_idp_matches[0].id }}"
+  tags: [access]
 
 - name: Look up existing Cloudflare Access Applications
   ansible.builtin.uri:
@@ -353,12 +376,14 @@
     status_code: [200]
   register: cf_all_apps
   no_log: true
+  tags: [access]
 
 - name: Provision Cloudflare Access application + policy for each hostname
   ansible.builtin.include_tasks: access-app.yml
   loop: "{{ cloudflare_access_hostnames }}"
   loop_control:
     loop_var: cf_hostname
+  tags: [access]
 
 - name: Print Cloudflare Access summary
   ansible.builtin.debug:
@@ -367,3 +392,4 @@
       - "{{ cloudflare_access_hostnames }}"
       - "Allowed identity: {{ cloudflare_access_allowed_email }} via {{ cloudflare_access_idp_name }}"
       - "Session duration: {{ cloudflare_access_session_duration }}"
+  tags: [access]

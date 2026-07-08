@@ -276,7 +276,14 @@ secret/cloudflare    TUNNEL_TOKEN, API_TOKEN, ZONE_ID, ACCOUNT_ID
 
 ## Remote Access
 
-- **Tailscale:** mesh VPN, subnet routing via rk1-control exposes 10.0.0.0/24
+- **Tailscale:** control-plane only (rk1-control), subnet routing exposes 10.0.0.0/24
+  to the tailnet. **Not installed on the worker nodes** — running it there
+  repeatedly hijacked their LAN routing (advertising 10.0.0.0/24 from rk1-control
+  combined with `--accept-routes` on workers that are already directly on that
+  same subnet redirected their return traffic through tailscale0, breaking plain
+  ICMP/SSH/kubelet-to-apiserver connectivity and taking them `NotReady`). Tailscale
+  was fully removed (`apt remove --purge`) from both workers; do not re-add it
+  without solving the overlapping-subnet routing conflict first.
 - **Cloudflare Tunnel:** exposes web UIs at kloud-worx.com (no port forwarding)
 - **Domain:** kloud-worx.com (on Cloudflare, nameservers pointing from GoDaddy)
 
@@ -318,7 +325,7 @@ make vault            # HashiCorp Vault + External Secrets Operator
 make secrets          # store API keys interactively into Vault
 make ai-stack         # LiteLLM, Qdrant, JupyterHub, LangGraph, Prefect, MCP servers
 make dev-tools        # Gitea + Actions runner
-make tailscale        # Tailscale on all nodes
+make tailscale        # Tailscale on rk1-control only (see Remote Access section)
 make cloudflare       # Cloudflare Tunnel for kloud-worx.com
 
 # GPU nodes (manual JetPack flash required first — see docs/)

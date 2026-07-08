@@ -1,14 +1,13 @@
 ---
 # ansible/roles/tailscale/tasks/main.yml
-# Installs Tailscale on the RK1 cluster nodes.
-# Enables subnet routing on rk1-control so your laptop can reach
-# the entire 10.0.0.0/24 network via one Tailscale connection.
+# Installs Tailscale on rk1-control only (control-plane subnet router) so your
+# laptop can reach the entire 10.0.0.0/24 network via one Tailscale connection.
+# Workers do NOT run Tailscale — see the playbook header comment for why.
 #
 # PREREQUISITE: TAILSCALE_AUTH_KEY must be stored in Vault:
 #   vault kv put secret/tailscale AUTH_KEY="tskey-auth-..."
-# The key MUST be reusable, not single-use — this same key is used for
-# `tailscale up` on all 3 nodes within one playbook run, so a single-use key
-# would leave 2 of 3 nodes unable to connect.
+# The key must be reusable, not single-use, in case this role is ever pointed
+# at more than one host again in the future.
 
 - name: Add Tailscale apt repo key
   ansible.builtin.shell: |
@@ -51,7 +50,6 @@
   loop:
     - net.ipv4.ip_forward
     - net.ipv6.conf.all.forwarding
-  when: inventory_hostname == 'rk1-control'
 
 - name: Connect to Tailscale network
   ansible.builtin.command: >
@@ -59,9 +57,7 @@
     --authkey={{ tailscale_auth_key }}
     --hostname={{ inventory_hostname }}
     --accept-routes
-    {% if inventory_hostname == 'rk1-control' %}
     --advertise-routes=10.0.0.0/24 --snat-subnet-routes=false
-    {% endif %}
   when: (tailscale_status.stdout | from_json).BackendState != 'Running'
   changed_when: true
   no_log: true    # Don't log the auth key

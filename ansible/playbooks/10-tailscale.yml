@@ -1,11 +1,16 @@
 ---
 # ansible/playbooks/10-tailscale.yml
-# Installs Tailscale on the RK1 cluster nodes. Jetson devices are added once
-# they're flashed and configured (jetson-orin/jetson-nano roles).
+# Installs Tailscale on rk1-control ONLY (control-plane subnet router).
+# Workers previously ran Tailscale too, but --accept-routes on the workers
+# combined with rk1-control advertising the same 10.0.0.0/24 subnet they're
+# already directly attached to repeatedly hijacked their return-traffic
+# routing — plain LAN/SSH/kubelet-to-apiserver traffic broke while Tailscale's
+# own tunnel kept working, sending worker nodes NotReady. Tailscale was fully
+# removed from both workers; see CLAUDE.md for the current architecture note.
 # Run after make kubernetes so nodes have their static IPs.
 
-- name: Install Tailscale on all nodes
-  hosts: rk1_nodes
+- name: Install Tailscale on control plane
+  hosts: k8s_control
   become: true
   vars:
     # Fetched from Vault by setup-api-keys.sh — do not hardcode here
@@ -20,7 +25,7 @@
     - name: Remote access instructions
       ansible.builtin.debug:
         msg:
-          - "Tailscale installed on all nodes."
+          - "Tailscale installed on rk1-control only (control-plane subnet router)."
           - "Install Tailscale on your devices:"
           - "  Windows: https://tailscale.com/download/windows"
           - "  macOS:   https://tailscale.com/download/mac"

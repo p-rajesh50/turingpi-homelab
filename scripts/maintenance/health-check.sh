@@ -24,7 +24,10 @@ curl -sf http://10.0.0.15:11434/api/tags --max-time 5 | \
   2>/dev/null || echo "  Ollama not reachable"
 
 echo ""; echo "═══ Services ════════════════════════════════════════════"
-kubectl --kubeconfig="$KUBECONFIG" get svc -A --field-selector='spec.type=LoadBalancer' 2>/dev/null | \
-  awk 'NR>1 {printf "  %-20s %-20s %s\n", $1, $2, $5}'
+# --field-selector spec.type=LoadBalancer isn't a supported field selector for
+# services (kubectl rejects it with "not a known field selector") — filter
+# client-side on the TYPE column instead.
+kubectl --kubeconfig="$KUBECONFIG" get svc -A 2>/dev/null | \
+  awk 'NR==1 || $3=="LoadBalancer" {printf "  %-20s %-30s %-15s %s\n", $1, $2, $5, $6}'
 
 echo ""; echo "Checked at: $(date)"

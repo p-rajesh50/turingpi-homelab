@@ -1,5 +1,5 @@
 # TuringPi Homelab — Session Handoff Document
-# Date: July 8, 2026
+# Date: July 8, 2026 (updated same day — post-handoff fixes below)
 # Use this to start a new Claude chat session with full context
 
 ---
@@ -32,6 +32,11 @@ live on the cluster — Cluster 1 is fully operational:
 
 This is the first time the full stack has been live simultaneously since the
 K3s+Cilium rebuild began.
+
+**Since that handoff (same day, new session):** metrics-server, Headlamp RBAC
+(two separate bugs), and eMMC space on all 3 nodes have all been fixed and
+verified. See "Post-Handoff Fixes" below — the eMMC urgency flagged in the
+previous version of this doc is resolved.
 
 ---
 
@@ -152,6 +157,113 @@ All of the above is committed and pushed to `origin/main`.
 
 ---
 
+## Post-Handoff Fixes (July 8, 2026 — same day, new session)
+
+Picked up right after the "full stack live" handoff above. Four separate
+fixes, all live-verified and committed/pushed to `origin/main`:
+
+1. **metrics-server self-scrape timeout, fixed `commit 2043f9e`**:
+   `kubectl top nodes` showed rk1-control as `<unknown>`, and Headlamp showed
+   "lost connection to cluster" / "no data" everywhere (a 403 on
+   `/apis/metrics.k8s.io/v1beta1/nodes` was breaking Headlamp's entire
+   cluster connection, not just the metrics view). Root cause: the
+   `metrics-server` pod happens to be scheduled on rk1-control itself.
+   Cross-node scrapes get Cilium-masqueraded to a LAN IP (matches the
+   existing UFW allow rule for `10.0.0.0/24`), but same-node self-scrapes
+   stay on the pod's real IP (`10.244.0.0/16` pod CIDR), which matched no UFW
+   rule and silently dropped. Fixed by adding a UFW allow rule for the pod
+   CIDR in the `common` role — applies to all nodes, so it's correct
+   regardless of which node any self-scraping component lands on in the
+   future. (Tailscale was suspected — matches a documented prior incident —
+   but live testing ruled it out.)
+2. **Headlamp metrics RBAC 403, fixed `commit 2043f9e`**: same commit as
+   above. `headlamp-admin` had `cluster-admin` plus two other bindings, none
+   of which actually covered the `metrics.k8s.io` API group. Added a
+   `ClusterRoleBinding` to the built-in `system:aggregated-metrics-reader`
+   ClusterRole.
+3. **Headlamp CRD 403, fixed `commit 8b24c91`**: after fix #2, Headlamp's
+   "Custom Resources" page still 403'd. Root cause was different and more
+   subtle: there are two ServiceAccounts in the `headlamp` namespace — the
+   Helm chart's own default `headlamp` SA, and a manually-created
+   `headlamp-admin` SA that Headlamp's browser session actually logs in as.
+   The `cluster-admin` `ClusterRoleBinding` was bound to the **wrong** one
+   (`headlamp`, not `headlamp-admin`) — so `headlamp-admin` never actually
+   had cluster-admin despite appearances. Rebound the existing
+   `ClusterRoleBinding`'s subject to the correct SA; verified via
+   `kubectl auth can-i '*' '*'` returning `yes`. Both Headlamp RBAC fixes are
+   now codified in `ansible/playbooks/04-cluster-addons.yml` so a reinstall
+   creates the ServiceAccount and both correct bindings from the start.
+4. **eMMC space reclaimed on all 3 nodes, fixed `commit 6d46659`**: see full
+   writeup below — this was the big one.
+
+### eMMC space reclaim — what was actually wrong
+
+The working assumption going in (see the old Follow-Up #2 below, now
+resolved) was "move `/var/lib/rancher`/containerd to NVMe via symlinks."
+Live diagnostics turned up two things that assumption got wrong:
+
+- **`/var/lib/containerd` on rk1-control and rk1-worker-2 (not worker-1) was
+  a leftover, *actively running* standalone `containerd.service`** (apt
+  package, from the old kubeadm cluster) — completely unused by K3s, which
+  embeds its own containerd under `/var/lib/rancher/k3s/agent/containerd`
+  and talks to it via `/run/k3s/containerd/containerd.sock`. This wasn't
+  "old data to relocate," it was live dead weight (11G of it on
+  rk1-worker-2 — the single biggest win). Fixed by stopping, disabling, and
+  masking the leftover service (same pattern as the earlier `multipathd`
+  fix), then deleting the directory. Worker-1 never had this service
+  installed.
+- **`/var/lib/kubelet` is NOT kubeadm cruft on any node** — K3s never
+  relocates the kubelet root-dir, so this is the live, active kubelet state
+  directory (pod volume mounts, CSI sockets) for whichever node it's on.
+  Confirmed via live `mount` output showing real pod subPath volumes mounted
+  under it. This directory was correctly left alone everywhere.
+
+Results: **rk1-worker-2 86% → 35%**, **rk1-worker-1 56% → 22%**,
+**rk1-control 53% → 46%** (containerd-service cleanup only — see below for
+why nothing else moved there). `/var/lib/rancher` was moved to
+`/var/lib/longhorn-nvme/rancher` (symlinked back) on both workers, which
+does have a mounted NVMe filesystem; **rk1-control's NVMe (`/dev/nvme0n1`,
+~954G) is physically present but completely unpartitioned/unmounted**, so
+`/var/lib/rancher` stays on rk1-control's eMMC (not critical there anyway).
+
+Permanent fix for future installs: `ansible/roles/common/tasks/main.yml` now
+strips the leftover `containerd.service` on any node that still has it (safe
+no-op on genuinely fresh nodes — this repo's own roles never install that
+package anymore). `ansible/roles/k3s-server/tasks/main.yml` and
+`ansible/roles/k3s-agent/tasks/main.yml` now pre-create and symlink
+`containerd`/`rancher` into `/var/lib/longhorn-nvme/` *before* the K3s
+installer runs, whenever that mount already exists — so a reinstall on an
+already-NVMe-provisioned node won't regress back onto eMMC. (Correctly never
+fires on rk1-control, which has no NVMe mount by design.)
+
+### Longhorn eviction bug found — deferred, not fixed
+
+rk1-control's eMMC Longhorn disk (`default-disk-c198b0f7bc4dffa4`) wasn't
+actually empty — it had **2 live scheduled replicas** with scheduling
+enabled (contradicts the "old/stale eMMC path" assumption that held true on
+the two workers). Attempted a proper Longhorn-native eviction (disable
+scheduling + `evictionRequested: true`, let Longhorn rebuild the replicas
+onto worker NVMe capacity) rather than a raw `rm -rf`. This surfaced a real
+Longhorn bug: new replica processes on the workers failed to start with
+`open /var/log/instances/<name>.log: no such file or directory` — direct
+testing inside the `instance-manager` containers showed that path flickering
+between existing and not, consistent with an internal cleanup race, not
+anything caused by this session's changes. **Reverted the eviction request**
+(`allowScheduling: true`, `evictionRequested: false`) rather than keep
+experimenting on live storage — all 6 Longhorn volumes stayed `healthy`
+throughout, nothing was lost. rk1-control's 2 replicas remain on its eMMC
+disk, healthy, untouched. Not urgent (46% usage has headroom) — see
+Follow-Ups for revisiting this.
+
+### `health-check.sh` fixed, `commit 7daed18`
+
+Unrelated latent bug found while running `make health` to verify the above:
+`--field-selector='spec.type=LoadBalancer'` isn't a supported field selector
+for Services on this kubectl/K8s version. Switched to client-side `awk`
+filtering on the TYPE column. `make health` now exits 0 cleanly.
+
+---
+
 ## Workstation Setup (parani-laptop)
 
 ```bash
@@ -256,12 +368,9 @@ http://10.0.0.40/v1   LiteLLM        http://10.0.0.35       MinIO
    currently holds placeholder values (added just to unblock LiteLLM's
    `ExternalSecret` sync during this session). Claude/Gemini model routes in
    LiteLLM won't actually authenticate until real keys replace them.
-2. **eMMC space — rk1-worker-2 is urgent**: measured this session at **95% full**
-   (29G total, 26G used, 1.5G available — worse than previously estimated).
-   rk1-control is at 52%, rk1-worker-1 at 47%. Plan: move
-   `/var/lib/rancher`/containerd storage to NVMe via symlinks on all 3 nodes,
-   prioritizing rk1-worker-2 first given how close it is to actually running out
-   of space (which would start failing pod scheduling/image pulls on that node).
+2. ~~eMMC space — rk1-worker-2 is urgent~~ **RESOLVED** — see "Post-Handoff
+   Fixes" above. rk1-worker-2 86%→35%, rk1-worker-1 56%→22%, rk1-control
+   53%→46%.
 3. **Deploy PostgreSQL for LiteLLM UI** — Bitnami Helm chart, Longhorn PVC.
    LiteLLM UI currently returns "not connected to DB" (spend tracking, user/team
    management unavailable without it). Tracked as item 8 in CLAUDE.md's Future
@@ -274,6 +383,18 @@ http://10.0.0.40/v1   LiteLLM        http://10.0.0.35       MinIO
 5. **See `CLAUDE.md`'s Future Enhancements Backlog** for the full ranked list
    (ArgoCD, RK1 NPU device plugin, Loki, Flyte, Chroma, Nvidia device plugin +
    Jetson exporter, Local Coding Assistant, PostgreSQL for LiteLLM).
+6. **rk1-control's 2 Longhorn replicas are still on its eMMC disk** (not
+   NVMe — it has none). Not urgent (46% usage, healthy), but if the
+   control-plane should have zero Longhorn footprint per the storage
+   architecture, this needs a real fix: chase down the `/var/log/instances`
+   race in Longhorn's `instance-manager` (see "Post-Handoff Fixes" above)
+   before attempting eviction again — that bug blocked it this session.
+7. **rk1-control has a physically present but unpartitioned/unmounted NVMe**
+   (`/dev/nvme0n1`, ~954G). Not used for anything today. If it's ever needed
+   (e.g. to move `/var/lib/rancher` off rk1-control's eMMC too), it needs
+   partitioning and formatting first — that's a new, separate piece of work,
+   not something the existing `longhorn-nvme` role/playbook does (that one
+   assumes NVMe is only for Longhorn on the workers).
 
 Not yet started (unchanged from before): Jetson Nano flash + config, Jetson Orin
 NX (deferred, module removed from board), TrueNAS, Cluster 2 (CM4).
@@ -321,6 +442,29 @@ NX (deferred, module removed from board), TrueNAS, Cluster 2 (CM4).
     (tunnel/DNS/Access) with a report after each, rather than one shot. Worth
     doing for any future change to shared network/routing configuration.
 11. **CLAUDE.md**: always kept current at the end of each session.
+12. **Same-node pod-to-host traffic isn't masqueraded like cross-node traffic
+    is**: a pod scraping its own node's host services (e.g. metrics-server
+    hitting its own node's kubelet) arrives at the host's `INPUT` chain with
+    the pod's real CIDR IP, not a masqueraded LAN IP. A UFW rule scoped to the
+    LAN subnet alone isn't enough — also need one for the pod CIDR.
+13. **`/var/lib/longhorn` is not just a replica-data directory — it also
+    permanently hosts `engine-binaries/` and other per-node Longhorn
+    plumbing**, needed on every node regardless of whether that node stores
+    any replica data. A Longhorn Node CR showing `scheduledReplica_count: 0`
+    only tells you about data scheduling, not whether the path is safe to
+    `rm -rf` outright — deleting it can silently wipe the engine binary
+    Longhorn needs to spawn new replica/engine processes there. If it must be
+    cleared, do it via Longhorn's own eviction mechanism, not a raw delete.
+14. **`/var/lib/kubelet` is never kubeadm cruft under K3s** — K3s uses it as
+    the live kubelet root-dir by default on every node. Verify with `mount`
+    for active pod volume mounts before ever considering it for cleanup.
+15. **A "same directory path, different meaning" trap**: this cluster
+    accumulated more than one leftover *systemd service* (`multipathd`,
+    standalone `containerd.service`) from before the K3s migration that still
+    silently write into `/var/lib/...` paths that look like simple data
+    directories. Before deleting or moving any `/var/lib/*` directory, check
+    `systemctl` / `fuser` for a live process still using it, not just its
+    apparent size or a related CR's scheduling status.
 
 ---
 
@@ -328,14 +472,14 @@ NX (deferred, module removed from board), TrueNAS, Cluster 2 (CM4).
 
 | Node | Device | Size | Type | Use |
 |---|---|---|---|---|
-| rk1-control | /dev/nvme0n1 | 953.9GB | NVMe | Longhorn |
-| rk1-control | /dev/mmcblk0 | 29.1GB | eMMC | Boot OS — 52% used |
-| rk1-worker-1 | /dev/nvme0n1 | 953.9GB | NVMe | Longhorn |
+| rk1-control | /dev/nvme0n1 | 953.9GB | NVMe | **Unpartitioned/unmounted** — not in use |
+| rk1-control | /dev/mmcblk0 | 29.1GB | eMMC | Boot OS + rancher (no NVMe to move it to) — 46% used |
+| rk1-worker-1 | /dev/nvme0n1 | 953.9GB | NVMe | Longhorn + rancher (symlinked from eMMC) |
 | rk1-worker-1 | /dev/sda2 | 476.4GB | SATA (mini-PCIe adapter) | NFS export |
-| rk1-worker-1 | /dev/mmcblk0 | 29.1GB | eMMC | Boot OS — 47% used |
-| rk1-worker-2 | /dev/nvme0n1 | 931.5GB | NVMe | Longhorn |
+| rk1-worker-1 | /dev/mmcblk0 | 29.1GB | eMMC | Boot OS — 22% used |
+| rk1-worker-2 | /dev/nvme0n1 | 931.5GB | NVMe | Longhorn + rancher (symlinked from eMMC) |
 | rk1-worker-2 | /dev/sda | 57.8GB | USB | Ignore for now |
-| rk1-worker-2 | /dev/mmcblk0 | 29.1GB | eMMC | Boot OS — **95% used, urgent** |
+| rk1-worker-2 | /dev/mmcblk0 | 29.1GB | eMMC | Boot OS — 35% used |
 
 NFS export path: /mnt/sata/k8s (on rk1-worker-1 at 10.0.0.12)
 
@@ -388,6 +532,10 @@ from where we left off.
 
 Current state: the full stack is live and verified end-to-end (K3s+Cilium,
 storage, addons, Vault/secrets, AI stack, dev tools, Tailscale control-plane-only,
-Cloudflare Tunnel with Google OAuth). See "Follow-Up Items for Future Sessions"
-above for what's next — eMMC space on rk1-worker-2 (95% full) is the most urgent.
+Cloudflare Tunnel with Google OAuth). metrics-server, Headlamp RBAC (two
+separate bugs), and eMMC space on all 3 nodes were fixed in a same-day
+follow-up session — see "Post-Handoff Fixes" above. See "Follow-Up Items for
+Future Sessions" for what's next — nothing urgent right now; real API keys
+for Vault and the deferred Longhorn eviction bug on rk1-control are the main
+open items.
 ```

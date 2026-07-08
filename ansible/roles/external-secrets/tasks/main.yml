@@ -188,6 +188,30 @@
             remoteRef:
               key: secret/gitea
               property: GITEA_ADMIN_EMAIL
+      ---
+      # Grafana admin password (admin-user is hardcoded — not sensitive, always "admin")
+      apiVersion: external-secrets.io/v1
+      kind: ExternalSecret
+      metadata:
+        name: grafana-admin-credentials
+        namespace: monitoring
+      spec:
+        refreshInterval: 1m
+        secretStoreRef:
+          name: vault-backend
+          kind: ClusterSecretStore
+        target:
+          name: monitoring-grafana
+          creationPolicy: Owner
+          template:
+            data:
+              admin-user: "admin"
+              admin-password: "{{ '{{' }} .password {{ '}}' }}"
+        data:
+          - secretKey: password
+            remoteRef:
+              key: secret/grafana
+              property: ADMIN_PASSWORD
 
 - name: Apply ExternalSecret manifests
   ansible.builtin.command: kubectl apply -f /tmp/external-secrets.yml

@@ -1,10 +1,19 @@
 # ARM64-tuned Prometheus + Grafana for RK1 nodes
 grafana:
-  adminPassword: "changeme"    # Update via: make secrets
+  admin:
+    existingSecret: "monitoring-grafana"    # populated by the external-secrets role from Vault secret/grafana
+    userKey: "admin-user"
+    passwordKey: "admin-password"
   persistence:
     enabled: true
     storageClassName: longhorn
     size: 5Gi
+  # RollingUpdate can deadlock a single-replica pod on a ReadWriteOnce PVC: the
+  # new pod gets scheduled to a different node than the old one and can never
+  # attach the volume while the old pod (never killed under RollingUpdate) still
+  # holds it. Recreate avoids this by terminating the old pod first.
+  deploymentStrategy:
+    type: Recreate
   service:
     type: LoadBalancer
     loadBalancerIP: "10.0.0.37"

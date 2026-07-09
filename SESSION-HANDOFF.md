@@ -37,10 +37,13 @@ K3s+Cilium rebuild began.
 (two separate bugs), eMMC space on all 3 nodes, `health-check.sh`, and a new
 `cluster-lifecycle.sh` (shutdown/startup/health-check) have all been fixed,
 written, and verified. See "Post-Handoff Fixes" below — the eMMC urgency
-flagged in the previous version of this doc is resolved. **Next up:** a real
-(not dry-run) shutdown/startup cycle to validate the new lifecycle script,
-plus two new planned chunks — an operational runbook and Prometheus
-alerting rules (see Follow-Ups).
+flagged in the previous version of this doc is resolved. Documentation was
+also brought fully current: `docs/runbook.md` (20-item severity-ordered
+troubleshooting playbook), a full `README.md` rewrite (was describing the
+pre-rebuild architecture), and `docs/medium-series-outline.md` (planned
+8-part article series). **Next up: Chunk 4 — Prometheus alerting rules with
+Gmail SMTP** (Gmail credentials already staged in Vault at
+`secret/alertmanager` — see Follow-Ups).
 
 ---
 
@@ -259,6 +262,34 @@ throughout, nothing was lost. rk1-control's 2 replicas remain on its eMMC
 disk, healthy, untouched. Not urgent (46% usage has headroom) — see
 Follow-Ups for revisiting this.
 
+### Documentation brought current — `commits a704d0f`, `e5d0955`
+
+Three docs written/rewritten, all pushed:
+- **`docs/runbook.md`** (new): severity-ordered (CRITICAL/HIGH/MEDIUM/LOW)
+  operational playbook covering 20 failure modes, each with detect/root
+  cause/remediation/verify/prevent. Most entries are grounded in actual
+  incidents from this cluster's history (Tailscale subnet-routing incident,
+  the eMMC/containerd.service reclaim, the Longhorn `/var/log/instances`
+  bug, multipathd, metrics-server pod-CIDR fix, fail2ban whitelist, etc.);
+  a handful with no specific past incident (CrashLoopBackOff, certificate
+  warnings, DNSConfigForming, high memory, image accumulation) are clearly
+  framed as general guidance rather than "this happened." Every command in
+  it was cross-checked against the actual repo/live cluster before
+  committing — caught and fixed one inaccurate command (an invented
+  `--tags metallb` on a playbook that has no task tags at all; replaced
+  with a direct `kubectl patch ipaddresspool`).
+- **`README.md`** (full rewrite): was still describing the *pre-rebuild*
+  architecture (Orin NX in slot 2, worker in slot 3, no Vault/Cloudflare/
+  Tailscale/Longhorn at all, an aspirational stack diagram listing
+  Postgres/Qdrant/JupyterHub/LangGraph/Prefect as if live). Now has a
+  Mermaid architecture diagram, real hardware requirements, the actual
+  12-step Quick Start, a Services table that clearly separates live
+  services from reserved-but-undeployed URLs (prefect/jupyter/llm
+  hostnames), and the current Known Limitations. Every `make <target>`
+  referenced was verified against the real `Makefile`.
+- **`docs/medium-series-outline.md`** (new): user-authored 8-part Medium
+  article series outline, transcribed as provided.
+
 ### `health-check.sh` fixed, `commit 7daed18`
 
 Unrelated latent bug found while running `make health` to verify the above:
@@ -369,7 +400,11 @@ rk1-control: 100.96.0.102 (subnet router, advertises 10.0.0.0/24,
 │   ├── health-check.sh          ← basic check, fixed Services field-selector bug
 │   ├── cluster-lifecycle.sh     ← shutdown/startup/health-check, --dry-run — NEW
 │   └── teardown.sh              ← K3s-native (k3s-uninstall.sh), not kubeadm
-└── kubernetes/helm-values/prometheus-stack.yml  ← Grafana existingSecret + Recreate strategy
+├── kubernetes/helm-values/prometheus-stack.yml  ← Grafana existingSecret + Recreate strategy
+└── docs/
+    ├── day0-runbook.md          ← full setup guide
+    ├── runbook.md                ← NEW — 20-item severity-ordered troubleshooting playbook
+    └── medium-series-outline.md  ← NEW — planned 8-part Medium article series
 ```
 
 ---
@@ -419,19 +454,29 @@ http://10.0.0.40/v1   LiteLLM        http://10.0.0.35       MinIO
    the command sequencing, not that a real drain/power-cycle/rejoin actually
    works). Treat the first real run as a supervised test, not routine
    maintenance, in case anything needs adjusting.
-5. **Chunk 3 — operational runbook (`docs/runbook.md`)**: not started.
-   Should cover day-to-day operations (how to check health, how to shut
-   down/start up safely, how to rotate secrets, common failure modes and
-   their fixes) as a human-readable companion to `CLAUDE.md`/this handoff
-   doc — pull from the "Key Learnings" section below, which already has most
-   of the raw material.
-6. **Chunk 4 — Prometheus alerting rules**: not started. `kube-prometheus-stack`
-   is deployed (`kubernetes/helm-values/prometheus-stack.yml`) but has no
-   custom `PrometheusRule` resources yet — only whatever default rules the
-   chart ships with. Worth adding rules for the failure modes already hit
-   this session: eMMC >70% (now checked ad hoc by `cluster-lifecycle.sh
-   health-check`, should also page/alert), Longhorn volume not `healthy`,
-   node `NotReady`, PVC `Failed`/`Lost`.
+5. ~~Chunk 3 — operational runbook (`docs/runbook.md`)~~ **RESOLVED** —
+   written, 20 failure modes across 4 severity tiers, committed (`a704d0f`).
+   `README.md` was also fully rewritten and `docs/medium-series-outline.md`
+   added in the same follow-up (`e5d0955`) — see "Documentation brought
+   current" above.
+6. **Chunk 4 — Prometheus alerting rules — NEXT TASK, in progress setup**:
+   `kube-prometheus-stack` is deployed
+   (`kubernetes/helm-values/prometheus-stack.yml`) but has no custom
+   `PrometheusRule` resources yet — only whatever default rules the chart
+   ships with, and no Alertmanager notification channel configured (alerts
+   would fire internally but never actually notify anyone). Gmail SMTP
+   credentials for Alertmanager have already been staged in Vault at
+   `secret/alertmanager` (`GMAIL_USER: rajesh.pamulapati50@gmail.com`,
+   `GMAIL_APP_PASSWORD` also stored — use an `ExternalSecret` to pull these
+   into the `monitoring` namespace, following the same pattern as
+   `grafana`'s `ExternalSecret` in `ansible/roles/external-secrets`; do not
+   hardcode either value into any file). Plan should cover: an
+   `ExternalSecret` for the Gmail creds, Alertmanager config (`route`,
+   `receivers` using `email_configs` with Gmail's SMTP relay
+   `smtp.gmail.com:587`), and `PrometheusRule` resources for the failure
+   modes already hit this session and documented in `docs/runbook.md`: eMMC
+   >70-80%, Longhorn volume not `healthy`, node `NotReady`, PVC
+   `Failed`/`Lost`, and ideally Vault sealed.
 7. **See `CLAUDE.md`'s Future Enhancements Backlog** for the full ranked list
    (ArgoCD, RK1 NPU device plugin, Loki, Flyte, Chroma, Nvidia device plugin +
    Jetson exporter, Local Coding Assistant, PostgreSQL for LiteLLM).
@@ -447,6 +492,11 @@ http://10.0.0.40/v1   LiteLLM        http://10.0.0.35       MinIO
    partitioning and formatting first — that's a new, separate piece of work,
    not something the existing `longhorn-nvme` role/playbook does (that one
    assumes NVMe is only for Longhorn on the workers).
+10. **`cluster-lifecycle.sh` still hasn't been run for real** — only
+    `--dry-run` and the real `health-check` mode have been tested. A real
+    `make cluster-shutdown` → `make cluster-startup` cycle is still needed
+    to validate the actual drain/power-cycle/rejoin sequence end-to-end.
+    Treat the first real run as a supervised test, not routine maintenance.
 
 Not yet started (unchanged from before): Jetson Nano flash + config, Jetson Orin
 NX (deferred, module removed from board), TrueNAS, Cluster 2 (CM4).
@@ -585,12 +635,21 @@ from where we left off.
 Current state: the full stack is live and verified end-to-end (K3s+Cilium,
 storage, addons, Vault/secrets, AI stack, dev tools, Tailscale control-plane-only,
 Cloudflare Tunnel with Google OAuth). metrics-server, Headlamp RBAC (two
-separate bugs), eMMC space on all 3 nodes, and a new cluster-lifecycle.sh
-script were all fixed/added in a same-day follow-up session — see
-"Post-Handoff Fixes" above. Nothing urgent right now. Next steps, in
-priority order: (1) run a real make cluster-shutdown / make cluster-startup
-cycle to validate the new lifecycle script against the live cluster (only
---dry-run and health-check have been tested so far), (2) write
-docs/runbook.md (operational runbook), (3) add Prometheus alerting rules.
+separate bugs), eMMC space on all 3 nodes, a new cluster-lifecycle.sh script,
+docs/runbook.md, a full README.md rewrite, and docs/medium-series-outline.md
+were all fixed/written in a same-day follow-up session — see "Post-Handoff
+Fixes" above. Nothing urgent right now.
+
+NEXT TASK: Chunk 4 — Prometheus alerting rules with Gmail SMTP for
+Alertmanager notifications. Gmail credentials are already staged in Vault
+at secret/alertmanager (GMAIL_USER: rajesh.pamulapati50@gmail.com,
+GMAIL_APP_PASSWORD also stored — pull both via an ExternalSecret, never
+hardcode). See Follow-Up item 6 for the full scope (ExternalSecret,
+Alertmanager email_configs receiver, PrometheusRule resources for eMMC/
+Longhorn/node/PVC failure modes already documented in docs/runbook.md).
+
+Also still open: a real (not dry-run) make cluster-shutdown / make
+cluster-startup cycle to validate cluster-lifecycle.sh end-to-end (only
+--dry-run and health-check have been tested so far).
 See "Follow-Up Items for Future Sessions" for full detail.
 ```

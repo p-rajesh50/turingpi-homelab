@@ -512,11 +512,44 @@ http://10.0.0.40/v1   LiteLLM        http://10.0.0.35       MinIO
 12. **Migrate Alertmanager notifications from Gmail SMTP to self-hosted
     `ntfy`** — tracked as item 9 in CLAUDE.md's Future Enhancements Backlog;
     prerequisite is Cluster 2 (CM4) being built.
-13. **`make common` currently fails apt-cache update on both workers**
-    (`rk1-worker-1`/`rk1-worker-2`, "Failed to update apt cache: unknown
-    reason") — pre-existing, unrelated to this session's changes (the new
-    Tailscale-metrics tasks are `k8s_control`-only and applied fine on
-    rk1-control), but worth root-causing before it masks a real failure.
+13. ~~`make common` apt-cache update failure on both workers~~ **RESOLVED** —
+    root cause: a leftover `/etc/apt/sources.list.d/tailscale.list` from before
+    Tailscale was purged from the workers, pointing at a keyring file that no
+    longer existed, causing `apt-get update` to throw a `NO_PUBKEY` GPG
+    warning that Ansible's `apt` module treats as a hard failure (the raw
+    `apt-get update` itself actually exits `0`). Fixed with a new
+    `ansible.builtin.file: state=absent` task in
+    `ansible/roles/common/tasks/main.yml`, scoped to `groups['k8s_workers']`
+    only — rk1-control's own Tailscale source/keyring are untouched. Verified
+    live: both workers now succeed on `make common`.
+14. ~~Chunk 5 — Grafana dashboards + ServiceMonitors~~ **RESOLVED**, with a
+    real incident along the way. Added: 8 community Grafana dashboards via the
+    chart's `gnetId` sidecar provisioning (node-exporter-full, K3s cluster,
+    Longhorn, Kubernetes PVCs, ingress-nginx, MinIO, Gitea, Cilium) under a
+    "TuringPi" folder, plus 3 new `ServiceMonitor`s
+    (`kubernetes/service-monitors/`) for MinIO (already scrape-ready —
+    `MINIO_PROMETHEUS_AUTH_TYPE=public` was already set), Gitea (needed
+    `gitea.metrics.enabled=true` added to `ansible/roles/gitea/tasks/main.yml`
+    — `/metrics` was a confirmed `404` before that), and Cilium (needed
+    `prometheus.enabled=true`/`operator.prometheus.enabled=true` via `cilium
+    upgrade` — no metrics port/Service existed before that; also required
+    hand-writing headless `cilium-agent`/`cilium-operator` Services since the
+    chart doesn't create one for ServiceMonitor to select against).
+
+    **Incident**: the `gitea.metrics.enabled=true` Helm upgrade forced a Gitea
+    pod recreation (`strategy.type=Recreate`, needed to avoid a BoltDB
+    lock-file race — see Key Learnings), which triggered the Longhorn
+    `/var/log/instances` race (Key Learnings #5/#13) plus a second, distinct
+    stuck-Engine-ticket state — Gitea was down for roughly 90 minutes. Fixed
+    by recreating `/var/log/instances` on the target node and restarting its
+    `instance-manager` pod. Full documented recovery procedure: `docs/runbook.md`
+    → MEDIUM → "Longhorn volume stuck attaching after pod recreation".
+    **Gitea's PVC now runs on rk1-worker-2, not rk1-worker-1** — the pod
+    recreation let the scheduler place it wherever the volume ended up
+    attaching; nothing pins it back. A new `ansible/roles/common` task ("Ensure
+    Longhorn instance log directory exists") now creates `/var/log/instances`
+    on all 3 nodes on every `make common` run, to prevent the first stage of
+    this race on a future node/reformat.
 
 Not yet started (unchanged from before): Jetson Nano flash + config, Jetson Orin
 NX (deferred, module removed from board), TrueNAS, Cluster 2 (CM4).
@@ -587,6 +620,24 @@ NX (deferred, module removed from board), TrueNAS, Cluster 2 (CM4).
     directories. Before deleting or moving any `/var/lib/*` directory, check
     `systemctl` / `fuser` for a live process still using it, not just its
     apparent size or a related CR's scheduling status.
+16. **kube-prometheus-stack's Grafana `dashboards.default.<key>` (gnetId
+    provisioning) writes to `/var/lib/grafana/dashboards/default`, which lives
+    on Grafana's persistent Longhorn volume — not an ephemeral path**. Fixing
+    a wrong `gnetId` and re-running `helm upgrade` is not enough: the old
+    downloaded JSON file is never pruned (the init container only adds/
+    overwrites files for keys present in the current values, it doesn't
+    delete files for removed keys), and even removing the key entirely
+    doesn't delete the stale file already on disk. Worse, Grafana's own
+    dashboard provisioner can then fail to reconcile the corrected file with
+    a `deprecatedInternalID=... is already in use` error, because the old
+    provisioned dashboard object (different embedded `uid`) is still present
+    in Grafana's SQLite DB and can't be deleted via the API
+    (`provisioned dashboard cannot be deleted`). Fix: `kubectl -n monitoring
+    exec deploy/monitoring-grafana -c grafana -- rm
+    /var/lib/grafana/dashboards/default/<key>.json` to delete the stale file
+    directly, wait for the provisioner's next reconcile pass to remove the
+    orphaned DB entry (confirm via the Grafana API dashboard search, not just
+    the file listing), then re-add the corrected key and `helm upgrade` again.
 
 ---
 

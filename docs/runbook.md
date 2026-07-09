@@ -610,6 +610,75 @@ interrupt it (e.g. don't power off a node mid-rebuild).
 
 ---
 
+### Longhorn volume stuck attaching after pod recreation
+
+**Detect**
+```bash
+kubectl get pods -n <namespace>   # target pod stuck Pending / Init:0/N for 10+ min
+kubectl -n longhorn-system get volumes.longhorn.io <vol> \
+  -o jsonpath='{.status.state} {.status.robustness} {.status.currentNodeID}'
+# state stays "attaching", robustness "unknown", currentNodeID empty
+```
+
+**Root cause**
+Hit during the Chunk 5 Grafana/ServiceMonitor session: a Helm upgrade that
+forces a pod recreation (e.g. `gitea.metrics.enabled=true` with
+`strategy.type=Recreate`) can trigger this in two stages:
+
+1. A replica fails to start on the new target node with `open
+   /var/log/instances/<replica-name>.log: no such file or directory` — the
+   same race documented in `CLAUDE.md` Key Learnings #5/#13 (`instance-manager`
+   cleanup race, not caused by normal operation). Confirm via:
+   ```bash
+   kubectl -n longhorn-system get events --sort-by='.lastTimestamp' | grep FailedStarting
+   ```
+2. Even after that failed replica is auto-cleaned up and the remaining
+   replicas are healthy, the volume can get stuck a *second*, distinct way:
+   Longhorn's volume-attachment controller selects the target node (visible in
+   `longhorn-manager` logs as `"Volume ... is selected to attach to node
+   ..."`), but the `Engine` object never picks up the ticket —
+   `desireState` stays `stopped` and `nodeID` stays empty indefinitely, while
+   the Kubernetes CSI attacher just keeps silently retrying the attach call
+   every ~90s with no progress. Confirm via:
+   ```bash
+   kubectl -n longhorn-system get engines.longhorn.io <vol>-e-0 -o jsonpath='{.spec}'
+   kubectl -n longhorn-system logs -l app=longhorn-manager --tail=2000 | grep <vol>
+   ```
+
+**Remediation**
+```bash
+# 1. Ensure the instance log directory exists on the target node (this is now
+#    also enforced by ansible/roles/common's "Ensure Longhorn instance log
+#    directory exists" task on every `make common` run, but confirm live):
+ssh -i $SSH_KEY ubuntu@<target-node-ip> "sudo mkdir -p /var/log/instances && sudo chmod 0755 /var/log/instances"
+
+# 2. Restart the instance-manager pod on that node — Longhorn's DaemonSet
+#    recreates it immediately, which forces the engine/replica processes to
+#    restart cleanly and re-pick-up the pending attach ticket:
+kubectl -n longhorn-system get pods -l longhorn.io/component=instance-manager -o wide   # find the pod on <target-node>
+kubectl -n longhorn-system delete pod <instance-manager-pod-on-target-node>
+```
+
+**Verify**
+```bash
+kubectl -n longhorn-system get volumes.longhorn.io <vol> \
+  -o jsonpath='{.status.state} {.status.robustness} {.status.currentNodeID}'
+# → attached healthy <target-node>
+kubectl get pods -n <namespace>   # target pod Running
+```
+
+**Prevent**
+`ansible/roles/common/tasks/main.yml`'s "Ensure Longhorn instance log
+directory exists" task creates `/var/log/instances` (root:root, 0755) on every
+node on every `make common` run, so a node that lost this directory (e.g.
+after an eMMC/OS-level cleanup) won't hit stage 1 of this race again. Stage 2
+(the stuck Engine ticket) has no known preventive fix yet — if it recurs
+without stage 1 also being present, go straight to the instance-manager
+restart above. See also `### Longhorn volume Faulted/Degraded` above for the
+general Longhorn-instance-manager race.
+
+---
+
 ### MetalLB IP pool >80% utilized
 
 **Detect**

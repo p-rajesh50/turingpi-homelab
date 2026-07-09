@@ -17,6 +17,31 @@ grafana:
   service:
     type: LoadBalancer
     loadBalancerIP: "10.0.0.37"
+  # Community dashboards fetched by the chart's built-in sidecar
+  # (grafana.sidecar.dashboards, enabled by default) from grafana.com by
+  # gnetId — requires outbound internet from the Grafana pod.
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: default
+          orgId: 1
+          folder: "TuringPi"
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/default
+  dashboards:
+    default:
+      node-exporter-full:   { gnetId: 1860,  datasource: Prometheus }
+      k3s-cluster:          { gnetId: 15282, datasource: Prometheus }
+      longhorn:             { gnetId: 13032, datasource: Prometheus }
+      kubernetes-pvcs:      { gnetId: 13646, datasource: Prometheus }
+      ingress-nginx:        { gnetId: 9614,  datasource: Prometheus }
+      minio:                { gnetId: 13502, datasource: Prometheus }
+      gitea:                { gnetId: 17802, datasource: Prometheus }
+      cilium:               { gnetId: 16611, datasource: Prometheus }
 
 prometheus:
   prometheusSpec:

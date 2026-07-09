@@ -104,6 +104,11 @@ practical takeaways in each article.
 - Building a graceful shutdown/startup script
 - Operational runbook: the 20 most common failure modes
 - Lessons learned: what breaks first and why
+- The Longhorn /var/log/instances race condition — a 90-minute debugging
+  session that started with a routine metrics Helm upgrade and ended with
+  discovering that a missing log directory in the instance-manager pod was
+  the root cause. Document the full symptom chain, what didn't work, and the
+  2-command fix.
 
 ---
 

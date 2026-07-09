@@ -101,6 +101,7 @@
     --set strategy.type=Recreate
     --set service.http.type=LoadBalancer
     --set service.http.annotations."metallb\.io/loadBalancerIPs"={{ gitea_service_ip }}
+    --set gitea.metrics.enabled=true
     --wait --timeout 10m
   changed_when: true
   environment:

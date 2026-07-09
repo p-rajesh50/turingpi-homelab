@@ -103,6 +103,29 @@
         - high-alerts.yml
         - warning-alerts.yml
 
+    # ServiceMonitors for services not scraped by kube-prometheus-stack's own
+    # defaults. Gitea requires gitea.metrics.enabled=true (ansible/roles/gitea)
+    # and Cilium requires prometheus.enabled=true (make cilium) — both applied
+    # separately before this; MinIO already ran with
+    # MINIO_PROMETHEUS_AUTH_TYPE=public out of the box.
+    - name: Copy ServiceMonitor manifests to control plane
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../kubernetes/service-monitors/{{ item }}"
+        dest: "/tmp/{{ item }}"
+        mode: "0644"
+      loop:
+        - minio-servicemonitor.yml
+        - gitea-servicemonitor.yml
+        - cilium-servicemonitor.yml
+
+    - name: Apply ServiceMonitor manifests
+      ansible.builtin.command: "kubectl apply -f /tmp/{{ item }}"
+      changed_when: true
+      loop:
+        - minio-servicemonitor.yml
+        - gitea-servicemonitor.yml
+        - cilium-servicemonitor.yml
+
     # ── Headlamp ──────────────────────────────────────────────────────────────
     - name: Install Headlamp
       ansible.builtin.command: >

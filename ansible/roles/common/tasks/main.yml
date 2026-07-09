@@ -1,4 +1,13 @@
 ---
+- name: Remove stale Tailscale APT source on worker nodes (Tailscale was purged
+    here after the subnet-routing incident — see CLAUDE.md Remote Access — but
+    the sources.list.d entry was left behind, pointing at a keyring file that no
+    longer exists and causing apt-get update to fail GPG verification)
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/tailscale.list
+    state: absent
+  when: inventory_hostname in groups['k8s_workers']
+
 - name: Update apt cache and upgrade packages
   ansible.builtin.apt:
     update_cache: true
@@ -114,6 +123,20 @@
     path: /var/lib/containerd
     state: absent
   when: leftover_containerd_service.stat.exists
+
+# Longhorn's instance-manager expects this directory to already exist when
+# starting a replica/engine process. If it's missing, replica start fails with
+# "open /var/log/instances/<name>.log: no such file or directory" — hit during
+# the Chunk 5 Gitea metrics rollout (see docs/runbook.md "Longhorn volume
+# stuck attaching after pod recreation"). Applies to all 3 nodes since any of
+# them can host Longhorn replicas.
+- name: Ensure Longhorn instance log directory exists
+  ansible.builtin.file:
+    path: /var/log/instances
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
 
 - name: Disable swap permanently via systemd (runs before kubelet on every boot)
   ansible.builtin.copy:

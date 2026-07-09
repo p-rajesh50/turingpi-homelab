@@ -1,0 +1,22 @@
+---
+# MinIO already runs with MINIO_PROMETHEUS_AUTH_TYPE=public (confirmed live:
+# GET /minio/v2/metrics/cluster returns 200 with no auth) and its Service
+# already carries the `monitoring: "true"` label from the chart.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: minio
+  namespace: minio
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - minio
+  selector:
+    matchLabels:
+      monitoring: "true"
+  endpoints:
+    - port: http
+      path: /minio/v2/metrics/cluster
+      interval: 30s

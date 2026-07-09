@@ -1,0 +1,78 @@
+---
+# The cilium Helm release (upgraded live with prometheus.enabled=true /
+# operator.prometheus.enabled=true — see ansible/playbooks/02b-cilium.yml)
+# exposes metrics as pod hostPorts (cilium-agent :9962, cilium-operator :9963)
+# but doesn't create a backing Service for either — confirmed live
+# (`kubectl -n kube-system get svc` showed no cilium-agent/cilium-operator
+# Service after the upgrade). ServiceMonitor requires a Service to resolve
+# Endpoints from, so headless Services are defined here alongside it,
+# selecting on the pods' existing labels (also confirmed live).
+apiVersion: v1
+kind: Service
+metadata:
+  name: cilium-agent
+  namespace: kube-system
+  labels:
+    k8s-app: cilium
+spec:
+  clusterIP: None
+  selector:
+    k8s-app: cilium
+  ports:
+    - name: prometheus
+      port: 9962
+      targetPort: 9962
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cilium-operator
+  namespace: kube-system
+  labels:
+    io.cilium/app: operator
+spec:
+  clusterIP: None
+  selector:
+    io.cilium/app: operator
+  ports:
+    - name: prometheus
+      port: 9963
+      targetPort: 9963
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: cilium-agent
+  namespace: kube-system
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - kube-system
+  selector:
+    matchLabels:
+      k8s-app: cilium
+  endpoints:
+    - port: prometheus
+      path: /metrics
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: cilium-operator
+  namespace: kube-system
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - kube-system
+  selector:
+    matchLabels:
+      io.cilium/app: operator
+  endpoints:
+    - port: prometheus
+      path: /metrics
+      interval: 30s

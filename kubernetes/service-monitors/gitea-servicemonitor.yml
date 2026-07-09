@@ -1,0 +1,21 @@
+---
+# Requires gitea.metrics.enabled=true (ansible/roles/gitea/tasks/main.yml) —
+# /metrics returns 404 otherwise, confirmed live before this was added.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: gitea
+  namespace: gitea
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - gitea
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gitea
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s

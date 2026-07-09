@@ -1,5 +1,5 @@
 # TuringPi Homelab — Session Handoff Document
-# Date: July 8, 2026 (updated same day — post-handoff fixes below)
+# Date: July 9, 2026 (Chunk 4-5 complete — see STATUS below)
 # Use this to start a new Claude chat session with full context
 
 ---
@@ -41,10 +41,43 @@ flagged in the previous version of this doc is resolved. Documentation was
 also brought fully current: `docs/runbook.md` (20-item severity-ordered
 troubleshooting playbook), a full `README.md` rewrite (was describing the
 pre-rebuild architecture), and `docs/medium-series-outline.md` (planned
-8-part article series). **Chunk 4 — Prometheus alerting rules with Gmail SMTP
-is now done and verified live** (test alert confirmed delivered to Gmail) —
-see Follow-Up item 6. Next up: a real (not `--dry-run`) `cluster-lifecycle.sh`
-shutdown/startup cycle (Follow-Up item 10).
+8-part article series).
+
+**July 9, 2026 — Chunk 4 and Chunk 5 both complete and verified live:**
+
+- **Cluster health fixes**: eMMC space reclaimed on all 3 nodes (rk1-worker-2
+  86%→35%, rk1-worker-1 56%→22%, rk1-control 53%→46%); Headlamp RBAC fixed
+  (`cluster-admin` was bound to the wrong ServiceAccount); metrics-server
+  fixed (missing pod-CIDR UFW rule for same-node kubelet self-scrape);
+  `cluster-lifecycle.sh` added (shutdown/startup/health-check, `--dry-run`
+  supported); `health-check.sh` field-selector bug fixed.
+- **Documentation**: `docs/runbook.md` created (20 failure modes, 4 severity
+  tiers, now 21 with the Longhorn stuck-attach entry below); `README.md`
+  fully rewritten for the current K3s+Cilium architecture;
+  `docs/medium-series-outline.md` created (8-article series outline).
+- **Chunk 4 — Prometheus alerting with Gmail SMTP**: 14 `PrometheusRule`
+  alert rules across critical/high/warning severity tiers, Alertmanager wired
+  to Gmail SMTP via a Vault-backed `ExternalSecret`, and a node-exporter
+  textfile collector on rk1-control backing the `TailscaleDown` alert (no
+  native Tailscale exporter exists). Verified live: a real test alert was
+  delivered to Gmail.
+- **Chunk 5 — Grafana dashboards + ServiceMonitors**: 8 community dashboards
+  provisioned under Grafana's "TuringPi" folder; new `ServiceMonitor`s for
+  MinIO, Gitea, and Cilium, all reporting `up` in Prometheus. Also fixed the
+  worker-node apt-cache failure (stale Tailscale APT source left over from
+  the earlier Tailscale-on-workers incident) and hit + resolved a real
+  Longhorn `/var/log/instances` stuck-attach incident along the way — full
+  recovery procedure now in `docs/runbook.md`, and a preventive Ansible task
+  was added to `ansible/roles/common`. **Gitea's PVC now runs on
+  rk1-worker-2** (moved from rk1-worker-1 during incident recovery — nothing
+  pins it back).
+
+**Current cluster state:** all 3 RK1 nodes `Ready`, all pods `Running`, all
+services live at kloud-worx.com, Gmail alerting active for
+critical/high/warning events, `make cluster-health` passes cleanly.
+
+**Next up:** see the revised roadmap in "Follow-Up Items for Future
+Sessions" below — TrueNAS integration is next (item 1).
 
 ---
 
@@ -436,123 +469,95 @@ http://10.0.0.40/v1   LiteLLM        http://10.0.0.35       MinIO
 
 ## Follow-Up Items for Future Sessions
 
-1. **Add real Anthropic and Gemini API keys to Vault** — `secret/llm-keys`
-   currently holds placeholder values (added just to unblock LiteLLM's
-   `ExternalSecret` sync during this session). Claude/Gemini model routes in
-   LiteLLM won't actually authenticate until real keys replace them.
-2. ~~eMMC space — rk1-worker-2 is urgent~~ **RESOLVED** — see "Post-Handoff
-   Fixes" above. rk1-worker-2 86%→35%, rk1-worker-1 56%→22%, rk1-control
-   53%→46%.
-3. **Deploy PostgreSQL for LiteLLM UI** — Bitnami Helm chart, Longhorn PVC.
-   LiteLLM UI currently returns "not connected to DB" (spend tracking, user/team
-   management unavailable without it). Tracked as item 8 in CLAUDE.md's Future
-   Enhancements Backlog.
-4. ~~Implement `cluster-lifecycle.sh`~~ **RESOLVED** — see "Post-Handoff
-   Fixes" above. Written, tested (`--dry-run` + real `health-check`),
-   committed (`fcd94d5`). **Not yet run for real** — next session should do a
-   real `make cluster-shutdown` → `make cluster-startup` cycle against the
-   live cluster to validate it end-to-end (the `--dry-run` test only proved
-   the command sequencing, not that a real drain/power-cycle/rejoin actually
-   works). Treat the first real run as a supervised test, not routine
-   maintenance, in case anything needs adjusting.
-5. ~~Chunk 3 — operational runbook (`docs/runbook.md`)~~ **RESOLVED** —
-   written, 20 failure modes across 4 severity tiers, committed (`a704d0f`).
-   `README.md` was also fully rewritten and `docs/medium-series-outline.md`
-   added in the same follow-up (`e5d0955`) — see "Documentation brought
-   current" above.
-6. ~~Chunk 4 — Prometheus alerting rules~~ **RESOLVED** — `alertmanager-gmail-credentials`
-   `ExternalSecret` added (`ansible/roles/external-secrets`), Alertmanager
-   configured with Gmail SMTP (`kubernetes/helm-values/prometheus-stack.yml`),
-   and 3 `PrometheusRule` CRDs added under `kubernetes/prometheus-rules/`
-   (critical/high/warning) covering eMMC, Longhorn, node NotReady, PVC
-   Failed/Lost, pod crash/OOM, MetalLB pool exhaustion, swap, node memory, and
-   Tailscale down. Applied live via `make common` → `make addons` → `make
-   vault`; a real test alert was sent through Alertmanager's API and the email
-   was confirmed delivered to rajesh.pamulapati50@gmail.com.
+### Roadmap (priority order)
 
-   Two things worth knowing for next time:
-   - **prometheus-operator (chart `kube-prometheus-stack-87.12.1`, operator
-     v0.92.1) rejects `smtp_auth_username_file`** as an unknown field in its
-     Alertmanager config schema — only `smtp_auth_password_file` is supported.
-     `GMAIL_USER` is kept inline in `prometheus-stack.yml` (it's the same
-     public address as `smtp_from`, not actually sensitive); only the app
-     password is pulled from the mounted Vault-backed secret.
-   - `VaultSealed` is a restart-count heuristic
-     (`increase(kube_pod_container_status_restarts_total{namespace="vault"}[15m]) > 2`),
-     not real seal-state — see item 11 below.
-   - `TailscaleDown` is backed by a new node-exporter textfile-collector metric
-     (`tailscale_up`), written every 60s by a new systemd timer on rk1-control
-     only (`scripts/monitoring/tailscale-metrics.sh`, deployed by the `common`
-     role, gated to `k8s_control`) — Tailscale itself has no native Prometheus
-     exporter.
-7. **See `CLAUDE.md`'s Future Enhancements Backlog** for the full ranked list
-   (ArgoCD, RK1 NPU device plugin, Loki, Flyte, Chroma, Nvidia device plugin +
-   Jetson exporter, Local Coding Assistant, PostgreSQL for LiteLLM).
-8. **rk1-control's 2 Longhorn replicas are still on its eMMC disk** (not
-   NVMe — it has none). Not urgent (46% usage, healthy), but if the
-   control-plane should have zero Longhorn footprint per the storage
-   architecture, this needs a real fix: chase down the `/var/log/instances`
-   race in Longhorn's `instance-manager` (see "Post-Handoff Fixes" above)
-   before attempting eviction again — that bug blocked it this session.
-9. **rk1-control has a physically present but unpartitioned/unmounted NVMe**
-   (`/dev/nvme0n1`, ~954G). Not used for anything today. If it's ever needed
-   (e.g. to move `/var/lib/rancher` off rk1-control's eMMC too), it needs
-   partitioning and formatting first — that's a new, separate piece of work,
-   not something the existing `longhorn-nvme` role/playbook does (that one
-   assumes NVMe is only for Longhorn on the workers).
-10. **`cluster-lifecycle.sh` still hasn't been run for real** — only
-    `--dry-run` and the real `health-check` mode have been tested. A real
-    `make cluster-shutdown` → `make cluster-startup` cycle is still needed
-    to validate the actual drain/power-cycle/rejoin sequence end-to-end.
-    Treat the first real run as a supervised test, not routine maintenance.
-11. **Enable real Vault telemetry** — the new `VaultSealed` PrometheusRule
-    (item 6 above) is a restart-count heuristic. Real seal-state detection
-    needs Vault's `telemetry` stanza enabled plus a `ServiceMonitor` scraping
-    `vault_core_unsealed`, which isn't set up yet.
-12. **Migrate Alertmanager notifications from Gmail SMTP to self-hosted
-    `ntfy`** — tracked as item 9 in CLAUDE.md's Future Enhancements Backlog;
-    prerequisite is Cluster 2 (CM4) being built.
-13. ~~`make common` apt-cache update failure on both workers~~ **RESOLVED** —
-    root cause: a leftover `/etc/apt/sources.list.d/tailscale.list` from before
-    Tailscale was purged from the workers, pointing at a keyring file that no
-    longer existed, causing `apt-get update` to throw a `NO_PUBKEY` GPG
-    warning that Ansible's `apt` module treats as a hard failure (the raw
-    `apt-get update` itself actually exits `0`). Fixed with a new
-    `ansible.builtin.file: state=absent` task in
-    `ansible/roles/common/tasks/main.yml`, scoped to `groups['k8s_workers']`
-    only — rk1-control's own Tailscale source/keyring are untouched. Verified
-    live: both workers now succeed on `make common`.
-14. ~~Chunk 5 — Grafana dashboards + ServiceMonitors~~ **RESOLVED**, with a
-    real incident along the way. Added: 8 community Grafana dashboards via the
-    chart's `gnetId` sidecar provisioning (node-exporter-full, K3s cluster,
-    Longhorn, Kubernetes PVCs, ingress-nginx, MinIO, Gitea, Cilium) under a
-    "TuringPi" folder, plus 3 new `ServiceMonitor`s
-    (`kubernetes/service-monitors/`) for MinIO (already scrape-ready —
-    `MINIO_PROMETHEUS_AUTH_TYPE=public` was already set), Gitea (needed
-    `gitea.metrics.enabled=true` added to `ansible/roles/gitea/tasks/main.yml`
-    — `/metrics` was a confirmed `404` before that), and Cilium (needed
-    `prometheus.enabled=true`/`operator.prometheus.enabled=true` via `cilium
-    upgrade` — no metrics port/Service existed before that; also required
-    hand-writing headless `cilium-agent`/`cilium-operator` Services since the
-    chart doesn't create one for ServiceMonitor to select against).
+1. **TrueNAS Integration** — TrueNAS is on the network at **10.0.0.97**,
+   currently via **DHCP, not static** — assigning it a static IP is a
+   prerequisite before any of the work below, since a DHCP lease can change
+   on renewal and silently break the Longhorn backup target URL. Two ways to
+   do it, either is fine:
+   1. Reserve `10.0.0.97` for TrueNAS's MAC address in the router's (XB8)
+      DHCP settings — easiest, no changes on the TrueNAS side.
+   2. Set a static IP directly in TrueNAS's own network settings.
 
-    **Incident**: the `gitea.metrics.enabled=true` Helm upgrade forced a Gitea
-    pod recreation (`strategy.type=Recreate`, needed to avoid a BoltDB
-    lock-file race — see Key Learnings), which triggered the Longhorn
-    `/var/log/instances` race (Key Learnings #5/#13) plus a second, distinct
-    stuck-Engine-ticket state — Gitea was down for roughly 90 minutes. Fixed
-    by recreating `/var/log/instances` on the target node and restarting its
-    `instance-manager` pod. Full documented recovery procedure: `docs/runbook.md`
-    → MEDIUM → "Longhorn volume stuck attaching after pod recreation".
-    **Gitea's PVC now runs on rk1-worker-2, not rk1-worker-1** — the pod
-    recreation let the scheduler place it wherever the volume ended up
-    attaching; nothing pins it back. A new `ansible/roles/common` task ("Ensure
-    Longhorn instance log directory exists") now creates `/var/log/instances`
-    on all 3 nodes on every `make common` run, to prevent the first stage of
-    this race on a future node/reformat.
+   Once static:
+   - Configure an NFS share on TrueNAS for Longhorn backups.
+   - Set Longhorn's backup target to the TrueNAS NFS share.
+   - Configure scheduled Longhorn volume snapshots.
+   - Optional: MinIO tiering to TrueNAS.
+
+2. **Slot 3 / Orin NX Investigation** — re-test slot 3 with the Orin NX
+   installed; the suspected DSA switch-silicon fault may actually have been
+   kubeadm/Tailscale artifacts from the old cluster, not a hardware fault.
+   - Research the correct JetPack version for an Orin NX 16GB on TuringPi.
+   - Flash JetPack on the Orin NX via BMC.
+   - Test basic network connectivity before installing any other software.
+   - Confirm or rule out the DSA hardware fault before committing further
+     work to this slot.
+
+3. **Orin NX as AI Inference Engine** (if slot 3 checks out):
+   - JetPack 6/7 with CUDA/TensorRT/cuDNN.
+   - Ollama with a TensorRT-LLM backend.
+   - Models: Gemma 3 12B, Qwen 3 7B/14B, Nvidia Nemotron 8B.
+   - Whisper large-v3 for speech-to-text.
+   - Wire the LiteLLM gateway to route heavy inference to the Orin NX.
+   - PostgreSQL for the LiteLLM UI (spend tracking, user/team management —
+     currently returns "not connected to DB").
+   - Benchmark inference performance.
+
+4. **Move Observability to Jetson Nano** — Prometheus + Grafana + Loki +
+   Alertmanager on the Jetson Nano (JetPack 4.6, already supported). Frees
+   RK1 resources and isolates monitoring from the app cluster.
+
+5. **CM4 Cluster** (10.0.0.20-24, 3 nodes already flashed):
+   - Bootstrap K3s on the CM4 cluster.
+   - Deploy `ntfy` to replace Gmail alerting.
+   - Pi-hole for home DNS.
+   - PostgreSQL for the LiteLLM UI, if not already done on the Orin NX.
+   - Dev/test sandbox.
+
+6. **RK1 NPU Embeddings Engine** — RKNN toolkit for the RK3588 NPU (6 TOPS
+   per node, 18 TOPS total across the cluster).
+   - `nomic-embed-text` via RKNN for the RAG pipeline.
+   - Qdrant vector database.
+   - Wire into LiteLLM routing.
+
+### Planned Architecture
+
+- **Orin NX**: heavy AI inference (Ollama, TensorRT).
+- **RK1 cluster**: apps, gateways, UIs, embeddings via NPU.
+- **Jetson Nano**: observability stack (Prometheus, Grafana, Loki).
+- **CM4 cluster**: `ntfy`, Pi-hole, dev sandbox.
+- **TrueNAS**: backup target for Longhorn + MinIO.
+
+### Deferred (still valid, not in the current priority order)
+
+- **`cluster-lifecycle.sh` still hasn't been run for real** — only
+  `--dry-run` and the real `health-check` mode have been tested. A real
+  `make cluster-shutdown` → `make cluster-startup` cycle is still needed to
+  validate the actual drain/power-cycle/rejoin sequence end-to-end. Treat
+  the first real run as a supervised test, not routine maintenance.
+- **Enable real Vault telemetry** — the `VaultSealed` PrometheusRule (Chunk
+  4) is a restart-count heuristic, not real seal-state. Needs Vault's
+  `telemetry` stanza enabled plus a `ServiceMonitor` scraping
+  `vault_core_unsealed`.
+- **LiteLLM OpenTelemetry metrics** — no exporter endpoint configured yet;
+  needed before LiteLLM can be scraped by Prometheus.
+- **ArgoCD** — GitOps operator for self-healing Helm deployments; see
+  CLAUDE.md's Future Enhancements Backlog for the full ranked list.
+- **Longhorn replica eviction from rk1-control's eMMC** — blocked by the
+  Longhorn `/var/log/instances` bug (see `docs/runbook.md`); 2 replicas are
+  healthy there today (46% eMMC usage), not urgent.
+- **rk1-control's NVMe is unpartitioned** (`/dev/nvme0n1`, ~954G) — raw disk,
+  needs partitioning/formatting before use; not something the existing
+  `longhorn-nvme` role handles today.
+- **Add real Anthropic and Gemini API keys to Vault** — `secret/llm-keys`
+  still holds placeholder values from initial setup; Claude/Gemini routes in
+  LiteLLM won't authenticate until real keys replace them.
 
 Not yet started (unchanged from before): Jetson Nano flash + config, Jetson Orin
-NX (deferred, module removed from board), TrueNAS, Cluster 2 (CM4).
+NX (deferred pending slot 3 investigation above), TrueNAS integration, Cluster 2
+(CM4) bootstrap.
 
 ---
 
@@ -705,22 +710,20 @@ from where we left off.
 
 Current state: the full stack is live and verified end-to-end (K3s+Cilium,
 storage, addons, Vault/secrets, AI stack, dev tools, Tailscale control-plane-only,
-Cloudflare Tunnel with Google OAuth). metrics-server, Headlamp RBAC (two
-separate bugs), eMMC space on all 3 nodes, a new cluster-lifecycle.sh script,
-docs/runbook.md, a full README.md rewrite, and docs/medium-series-outline.md
-were all fixed/written in a same-day follow-up session — see "Post-Handoff
-Fixes" above. Nothing urgent right now.
+Cloudflare Tunnel with Google OAuth). Chunk 4 (Prometheus alerting with Gmail
+SMTP) and Chunk 5 (Grafana dashboards + ServiceMonitors) are both done and
+verified live — see the July 9, 2026 STATUS entry above. All 3 nodes Ready,
+all pods Running, make cluster-health passes cleanly. Nothing urgent right now.
 
-NEXT TASK: Chunk 4 — Prometheus alerting rules with Gmail SMTP for
-Alertmanager notifications. Gmail credentials are already staged in Vault
-at secret/alertmanager (GMAIL_USER: rajesh.pamulapati50@gmail.com,
-GMAIL_APP_PASSWORD also stored — pull both via an ExternalSecret, never
-hardcode). See Follow-Up item 6 for the full scope (ExternalSecret,
-Alertmanager email_configs receiver, PrometheusRule resources for eMMC/
-Longhorn/node/PVC failure modes already documented in docs/runbook.md).
+NEXT TASK: TrueNAS Integration (roadmap item 1) — TrueNAS is on the network
+at 10.0.0.97 via DHCP; the first step is giving it a static IP (reserve
+10.0.0.97 for its MAC in the router's DHCP settings, or set it statically on
+TrueNAS itself) before configuring an NFS share for Longhorn backups, setting
+Longhorn's backup target, and scheduling volume snapshots.
 
-Also still open: a real (not dry-run) make cluster-shutdown / make
-cluster-startup cycle to validate cluster-lifecycle.sh end-to-end (only
---dry-run and health-check have been tested so far).
-See "Follow-Up Items for Future Sessions" for full detail.
+See "Follow-Up Items for Future Sessions" for the full revised roadmap
+(TrueNAS → Slot 3/Orin NX investigation → Orin NX AI inference → move
+observability to Jetson Nano → CM4 cluster → RK1 NPU embeddings) and the
+Deferred list for lower-priority open items (cluster-lifecycle.sh live test,
+Vault telemetry, LiteLLM OTel metrics, ArgoCD, and others).
 ```

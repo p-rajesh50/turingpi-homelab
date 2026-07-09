@@ -286,6 +286,10 @@ secret/cloudflare    TUNNEL_TOKEN, API_TOKEN, ZONE_ID, ACCOUNT_ID
   without solving the overlapping-subnet routing conflict first.
 - **Cloudflare Tunnel:** exposes web UIs at kloud-worx.com (no port forwarding)
 - **Domain:** kloud-worx.com (on Cloudflare, nameservers pointing from GoDaddy)
+- **Alertmanager notifications:** Gmail SMTP (`smtp.gmail.com:587`, credentials in
+  Vault at `secret/alertmanager`) is a **temporary** notification channel — plan is
+  to replace it with self-hosted `ntfy` once Cluster 2 (CM4) is built (see Future
+  Enhancements Backlog).
 
 ### Service URLs (after full deployment)
 ```
@@ -502,3 +506,9 @@ Ranked by priority.
    connect LiteLLM to it to enable the LiteLLM UI (spend tracking, user management, team
    management). LiteLLM UI currently returns a "not connected to DB" error.
    *Prerequisite:* Longhorn storage working (done).
+
+9. **Self-hosted `ntfy` for Alertmanager notifications** — replaces the current Gmail
+   SMTP receiver (`kubernetes/helm-values/prometheus-stack.yml`), which is a temporary
+   bridge. Push notifications instead of email, no dependency on a third-party mail
+   provider.
+   *Prerequisite:* Cluster 2 (CM4) built.

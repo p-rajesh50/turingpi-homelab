@@ -1,0 +1,65 @@
+---
+# Critical failure modes — see docs/runbook.md "CRITICAL (immediate action required)"
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: turingpi-critical-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: turingpi-critical
+      rules:
+        - alert: NodeDown
+          expr: up{job="node-exporter"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Node {{ $labels.instance }} unreachable"
+            description: "node-exporter on {{ $labels.instance }} has been unreachable for 5m. See docs/runbook.md 'Node NotReady'."
+
+        - alert: AllNodesNotReady
+          expr: count(kube_node_status_condition{condition="Ready",status="true"} == 1) == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "All cluster nodes are NotReady"
+            description: "No node reports Ready. See docs/runbook.md 'Node NotReady'."
+
+        - alert: VaultSealed
+          expr: increase(kube_pod_container_status_restarts_total{namespace="vault"}[15m]) > 2
+          labels:
+            severity: critical
+          annotations:
+            summary: "Vault pod restarting repeatedly (possible seal)"
+            description: "Restart-count heuristic, not real seal-state (Vault telemetry not yet enabled — see SESSION-HANDOFF.md follow-ups). Check with 'make vault-unseal'."
+
+        - alert: PVCFailed
+          expr: kube_persistentvolumeclaim_status_phase{phase=~"Failed|Lost"} == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is {{ $labels.phase }}"
+            description: "See docs/runbook.md 'PVC in Lost/Failed state'."
+
+        - alert: LonghornVolumeFaulted
+          expr: longhorn_volume_robustness{robustness="faulted"} == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Longhorn volume {{ $labels.volume }} is faulted"
+            description: "See docs/runbook.md 'Longhorn volume Faulted/Degraded'."
+
+        - alert: PodCrashLoopBackOff
+          expr: kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"} == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} is CrashLoopBackOff"
+            description: "See docs/runbook.md 'Pod CrashLoopBackOff'."

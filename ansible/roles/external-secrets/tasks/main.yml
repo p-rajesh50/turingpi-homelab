@@ -212,6 +212,33 @@
             remoteRef:
               key: secret/grafana
               property: ADMIN_PASSWORD
+      ---
+      # Alertmanager Gmail SMTP credentials — mounted as files into the
+      # alertmanager pod (alertmanagerSpec.secrets) and referenced via
+      # smtp_auth_username_file/smtp_auth_password_file in
+      # kubernetes/helm-values/prometheus-stack.yml, never inlined in config.
+      apiVersion: external-secrets.io/v1
+      kind: ExternalSecret
+      metadata:
+        name: alertmanager-gmail-credentials
+        namespace: monitoring
+      spec:
+        refreshInterval: 1m
+        secretStoreRef:
+          name: vault-backend
+          kind: ClusterSecretStore
+        target:
+          name: alertmanager-gmail-credentials
+          creationPolicy: Owner
+        data:
+          - secretKey: GMAIL_USER
+            remoteRef:
+              key: secret/alertmanager
+              property: GMAIL_USER
+          - secretKey: GMAIL_APP_PASSWORD
+            remoteRef:
+              key: secret/alertmanager
+              property: GMAIL_APP_PASSWORD
 
 - name: Apply ExternalSecret manifests
   ansible.builtin.command: kubectl apply -f /tmp/external-secrets.yml

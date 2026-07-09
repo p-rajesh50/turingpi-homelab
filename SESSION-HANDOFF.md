@@ -41,9 +41,10 @@ flagged in the previous version of this doc is resolved. Documentation was
 also brought fully current: `docs/runbook.md` (20-item severity-ordered
 troubleshooting playbook), a full `README.md` rewrite (was describing the
 pre-rebuild architecture), and `docs/medium-series-outline.md` (planned
-8-part article series). **Next up: Chunk 4 — Prometheus alerting rules with
-Gmail SMTP** (Gmail credentials already staged in Vault at
-`secret/alertmanager` — see Follow-Ups).
+8-part article series). **Chunk 4 — Prometheus alerting rules with Gmail SMTP
+is now done and verified live** (test alert confirmed delivered to Gmail) —
+see Follow-Up item 6. Next up: a real (not `--dry-run`) `cluster-lifecycle.sh`
+shutdown/startup cycle (Follow-Up item 10).
 
 ---
 
@@ -459,24 +460,31 @@ http://10.0.0.40/v1   LiteLLM        http://10.0.0.35       MinIO
    `README.md` was also fully rewritten and `docs/medium-series-outline.md`
    added in the same follow-up (`e5d0955`) — see "Documentation brought
    current" above.
-6. **Chunk 4 — Prometheus alerting rules — NEXT TASK, in progress setup**:
-   `kube-prometheus-stack` is deployed
-   (`kubernetes/helm-values/prometheus-stack.yml`) but has no custom
-   `PrometheusRule` resources yet — only whatever default rules the chart
-   ships with, and no Alertmanager notification channel configured (alerts
-   would fire internally but never actually notify anyone). Gmail SMTP
-   credentials for Alertmanager have already been staged in Vault at
-   `secret/alertmanager` (`GMAIL_USER: rajesh.pamulapati50@gmail.com`,
-   `GMAIL_APP_PASSWORD` also stored — use an `ExternalSecret` to pull these
-   into the `monitoring` namespace, following the same pattern as
-   `grafana`'s `ExternalSecret` in `ansible/roles/external-secrets`; do not
-   hardcode either value into any file). Plan should cover: an
-   `ExternalSecret` for the Gmail creds, Alertmanager config (`route`,
-   `receivers` using `email_configs` with Gmail's SMTP relay
-   `smtp.gmail.com:587`), and `PrometheusRule` resources for the failure
-   modes already hit this session and documented in `docs/runbook.md`: eMMC
-   >70-80%, Longhorn volume not `healthy`, node `NotReady`, PVC
-   `Failed`/`Lost`, and ideally Vault sealed.
+6. ~~Chunk 4 — Prometheus alerting rules~~ **RESOLVED** — `alertmanager-gmail-credentials`
+   `ExternalSecret` added (`ansible/roles/external-secrets`), Alertmanager
+   configured with Gmail SMTP (`kubernetes/helm-values/prometheus-stack.yml`),
+   and 3 `PrometheusRule` CRDs added under `kubernetes/prometheus-rules/`
+   (critical/high/warning) covering eMMC, Longhorn, node NotReady, PVC
+   Failed/Lost, pod crash/OOM, MetalLB pool exhaustion, swap, node memory, and
+   Tailscale down. Applied live via `make common` → `make addons` → `make
+   vault`; a real test alert was sent through Alertmanager's API and the email
+   was confirmed delivered to rajesh.pamulapati50@gmail.com.
+
+   Two things worth knowing for next time:
+   - **prometheus-operator (chart `kube-prometheus-stack-87.12.1`, operator
+     v0.92.1) rejects `smtp_auth_username_file`** as an unknown field in its
+     Alertmanager config schema — only `smtp_auth_password_file` is supported.
+     `GMAIL_USER` is kept inline in `prometheus-stack.yml` (it's the same
+     public address as `smtp_from`, not actually sensitive); only the app
+     password is pulled from the mounted Vault-backed secret.
+   - `VaultSealed` is a restart-count heuristic
+     (`increase(kube_pod_container_status_restarts_total{namespace="vault"}[15m]) > 2`),
+     not real seal-state — see item 11 below.
+   - `TailscaleDown` is backed by a new node-exporter textfile-collector metric
+     (`tailscale_up`), written every 60s by a new systemd timer on rk1-control
+     only (`scripts/monitoring/tailscale-metrics.sh`, deployed by the `common`
+     role, gated to `k8s_control`) — Tailscale itself has no native Prometheus
+     exporter.
 7. **See `CLAUDE.md`'s Future Enhancements Backlog** for the full ranked list
    (ArgoCD, RK1 NPU device plugin, Loki, Flyte, Chroma, Nvidia device plugin +
    Jetson exporter, Local Coding Assistant, PostgreSQL for LiteLLM).
@@ -497,6 +505,18 @@ http://10.0.0.40/v1   LiteLLM        http://10.0.0.35       MinIO
     `make cluster-shutdown` → `make cluster-startup` cycle is still needed
     to validate the actual drain/power-cycle/rejoin sequence end-to-end.
     Treat the first real run as a supervised test, not routine maintenance.
+11. **Enable real Vault telemetry** — the new `VaultSealed` PrometheusRule
+    (item 6 above) is a restart-count heuristic. Real seal-state detection
+    needs Vault's `telemetry` stanza enabled plus a `ServiceMonitor` scraping
+    `vault_core_unsealed`, which isn't set up yet.
+12. **Migrate Alertmanager notifications from Gmail SMTP to self-hosted
+    `ntfy`** — tracked as item 9 in CLAUDE.md's Future Enhancements Backlog;
+    prerequisite is Cluster 2 (CM4) being built.
+13. **`make common` currently fails apt-cache update on both workers**
+    (`rk1-worker-1`/`rk1-worker-2`, "Failed to update apt cache: unknown
+    reason") — pre-existing, unrelated to this session's changes (the new
+    Tailscale-metrics tasks are `k8s_control`-only and applied fine on
+    rk1-control), but worth root-causing before it masks a real failure.
 
 Not yet started (unchanged from before): Jetson Nano flash + config, Jetson Orin
 NX (deferred, module removed from board), TrueNAS, Cluster 2 (CM4).

@@ -135,3 +135,51 @@
       WantedBy=multi-user.target
     mode: "0644"
   notify: Reload and enable disable-swap unit
+
+# Tailscale only runs on rk1-control (see CLAUDE.md Remote Access — never
+# reinstall on workers). Feeds node-exporter's textfile collector so the
+# TailscaleDown PrometheusRule has a real metric to alert on.
+- name: Create node-exporter textfile collector directory
+  ansible.builtin.file:
+    path: /var/lib/node_exporter/textfile_collector
+    state: directory
+    mode: "0755"
+  when: inventory_hostname in groups['k8s_control']
+
+- name: Deploy tailscale-metrics.sh
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../scripts/monitoring/tailscale-metrics.sh"
+    dest: /usr/local/bin/tailscale-metrics.sh
+    mode: "0755"
+  when: inventory_hostname in groups['k8s_control']
+
+- name: Deploy tailscale-metrics systemd service
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/tailscale-metrics.service
+    content: |
+      [Unit]
+      Description=Write tailscale_up metric for node-exporter textfile collector
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/tailscale-metrics.sh
+    mode: "0644"
+  when: inventory_hostname in groups['k8s_control']
+  notify: Reload and enable tailscale-metrics timer
+
+- name: Deploy tailscale-metrics systemd timer
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/tailscale-metrics.timer
+    content: |
+      [Unit]
+      Description=Run tailscale-metrics.sh every 60s
+
+      [Timer]
+      OnBootSec=30s
+      OnUnitActiveSec=60s
+
+      [Install]
+      WantedBy=timers.target
+    mode: "0644"
+  when: inventory_hostname in groups['k8s_control']
+  notify: Reload and enable tailscale-metrics timer

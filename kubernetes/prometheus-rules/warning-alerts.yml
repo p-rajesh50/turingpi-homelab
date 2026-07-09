@@ -1,0 +1,48 @@
+---
+# Early-warning failure modes — see docs/runbook.md "HIGH"/general prevention notes
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: turingpi-warning-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: turingpi-warning
+      rules:
+        - alert: EMMCDiskWarning
+          expr: 100 - (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} * 100) > 70
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "eMMC on {{ $labels.instance }} above 70%"
+            description: "Matches make cluster-health's own 70% warning threshold. See docs/runbook.md 'eMMC disk >80%'."
+
+        - alert: SwapActive
+          expr: node_memory_SwapTotal_bytes - node_memory_SwapFree_bytes > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Swap active on {{ $labels.instance }}"
+            description: "Swap should be disabled cluster-wide via the disable-swap systemd unit in the common role."
+
+        - alert: NodeMemoryHigh
+          expr: 100 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes * 100) > 85
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Memory usage on {{ $labels.instance }} above 85%"
+            description: "Sustained high memory pressure — check for runaway pods with kubectl top pods -A."
+
+        - alert: TailscaleDown
+          expr: tailscale_up{instance=~"10.0.0.11.*"} == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Tailscale is down on rk1-control"
+            description: "tailscale_up sourced from the node-exporter textfile collector (scripts/monitoring/tailscale-metrics.sh). Remote access via Tailscale is unavailable."

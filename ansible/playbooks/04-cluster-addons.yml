@@ -79,6 +79,30 @@
         --wait --timeout 10m
       changed_when: true
 
+    # PrometheusRule CRDs — Alertmanager notification channel (Gmail SMTP) is
+    # configured via prometheus-stack.yml's alertmanager.config; the Gmail app
+    # password itself comes from Vault secret/alertmanager via the
+    # alertmanager-gmail-credentials ExternalSecret (external-secrets role,
+    # applied by `make vault`). Until that secret exists, Alertmanager will
+    # show CreateContainerConfigError — expected until `make vault` runs.
+    - name: Copy PrometheusRule manifests to control plane
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../kubernetes/prometheus-rules/{{ item }}"
+        dest: "/tmp/{{ item }}"
+        mode: "0644"
+      loop:
+        - critical-alerts.yml
+        - high-alerts.yml
+        - warning-alerts.yml
+
+    - name: Apply PrometheusRule manifests
+      ansible.builtin.command: "kubectl apply -f /tmp/{{ item }}"
+      changed_when: true
+      loop:
+        - critical-alerts.yml
+        - high-alerts.yml
+        - warning-alerts.yml
+
     # ── Headlamp ──────────────────────────────────────────────────────────────
     - name: Install Headlamp
       ansible.builtin.command: >

@@ -37,6 +37,43 @@ alertmanager:
     resources:
       requests: { memory: 128Mi, cpu: 50m }
       limits:   { memory: 256Mi }
+    # Mounts K8s Secret alertmanager-gmail-credentials (from Vault secret/alertmanager
+    # via the external-secrets role) at
+    # /etc/alertmanager/secrets/alertmanager-gmail-credentials/<key> — never inline
+    # the Gmail app password in this file.
+    secrets:
+      - alertmanager-gmail-credentials
+  config:
+    global:
+      smtp_smarthost: "smtp.gmail.com:587"
+      smtp_from: "rajesh.pamulapati50@gmail.com"
+      # prometheus-operator's Alertmanager config schema (v0.92.1, chart 87.12.1)
+      # doesn't support smtp_auth_username_file (rejects it as an unknown field),
+      # only smtp_auth_password_file — confirmed against the live cluster's
+      # Alertmanager CR Reconciled condition. GMAIL_USER is the same public
+      # address as smtp_from above, not a secret, so it's safe inline; only the
+      # app password is pulled from the mounted Vault secret.
+      smtp_auth_username: "rajesh.pamulapati50@gmail.com"
+      smtp_auth_password_file: /etc/alertmanager/secrets/alertmanager-gmail-credentials/GMAIL_APP_PASSWORD
+      smtp_require_tls: true
+    route:
+      receiver: gmail-notifications
+      group_by: ["alertname", "severity"]
+      group_wait: 10s
+      group_interval: 5m
+      repeat_interval: 4h
+      routes:
+        - matchers: ["severity=\"critical\""]
+          group_wait: 10s
+          repeat_interval: 1h
+        - matchers: ["severity=\"warning\""]
+          group_wait: 5m
+          repeat_interval: 6h
+    receivers:
+      - name: gmail-notifications
+        email_configs:
+          - to: "rajesh.pamulapati50@gmail.com"
+            send_resolved: true
 
 # Disable components not exposed by K3s by default
 kubeEtcd:             { enabled: false }
@@ -44,3 +81,15 @@ kubeControllerManager: { enabled: false }
 kubeScheduler:        { enabled: false }
 kubeProxy:            { enabled: false }
 nodeExporter:         { enabled: true }
+
+# node-exporter's textfile collector — backs the TailscaleDown PrometheusRule via
+# scripts/monitoring/tailscale-metrics.sh writing tailscale_up to this hostPath
+# on rk1-control (see ansible/roles/common for the systemd timer).
+prometheus-node-exporter:
+  extraArgs:
+    - --collector.textfile.directory=/var/lib/node_exporter/textfile_collector
+  extraHostVolumeMounts:
+    - name: textfile-collector
+      hostPath: /var/lib/node_exporter/textfile_collector
+      mountPath: /var/lib/node_exporter/textfile_collector
+      readOnly: true

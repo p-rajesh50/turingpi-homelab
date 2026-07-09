@@ -1,0 +1,47 @@
+---
+# High-priority failure modes (action within 1 hour) — see docs/runbook.md "HIGH"
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: turingpi-high-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: turingpi-high
+      rules:
+        - alert: EMMCDiskCritical
+          expr: 100 - (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} * 100) > 80
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "eMMC on {{ $labels.instance }} above 80%"
+            description: "See docs/runbook.md 'eMMC disk >80%'."
+
+        - alert: PodOOMKilled
+          expr: kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod {{ $labels.namespace }}/{{ $labels.pod }} was OOMKilled"
+            description: "Container {{ $labels.container }} was OOMKilled — check resource limits."
+
+        - alert: LonghornVolumeDegraded
+          expr: longhorn_volume_robustness{robustness="degraded"} == 1
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Longhorn volume {{ $labels.volume }} degraded >30m"
+            description: "See docs/runbook.md 'Longhorn volume Faulted/Degraded'."
+
+        - alert: MetalLBPoolExhausted
+          expr: metallb_allocator_addresses_in_use_total / metallb_allocator_addresses_total > 0.8
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "MetalLB pool {{ $labels.pool }} over 80% allocated"
+            description: "Fewer than 20% of LoadBalancer IPs remain in pool {{ $labels.pool }}."

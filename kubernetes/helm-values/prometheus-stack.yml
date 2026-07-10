@@ -20,6 +20,22 @@ grafana:
   # Community dashboards fetched by the chart's built-in sidecar
   # (grafana.sidecar.dashboards, enabled by default) from grafana.com by
   # gnetId — requires outbound internet from the Grafana pod.
+  #
+  # folderAnnotation: ConfigMaps carrying this annotation (set to a folder
+  # name) get placed in that Grafana folder instead of the sidecar's default
+  # "General" — used by the Longhorn/Node-Exporter-Full/MinIO ConfigMaps
+  # (kubernetes/grafana-dashboards/) to land in "TuringPi" alongside every
+  # other dashboard.
+  sidecar:
+    dashboards:
+      folderAnnotation: grafana_folder
+      # folderAnnotation alone only controls where the sidecar WRITES the
+      # file (into a /tmp/dashboards/<folder>/ subdirectory) — Grafana's own
+      # file-provisioner also needs this to translate that directory
+      # structure into an actual dashboard folder assignment, otherwise it
+      # falls back to the provider's static (empty/General) folder.
+      provider:
+        foldersFromFilesStructure: true
   dashboardProviders:
     dashboardproviders.yaml:
       apiVersion: 1
@@ -39,25 +55,25 @@ grafana:
       # every gnetId — several of these are pinned below because revision 1
       # predates current metric-naming schemes and showed no/partial data.
       #
-      # node-exporter-full and longhorn are NOT provisioned here — every
-      # modern revision of both dashboards uses Grafana's newer per-panel
-      # object-form datasource ref ("datasource": {"type":"prometheus",
-      # "uid":"${DS_PROMETHEUS}"}), which this chart's download_dashboards.sh
-      # can't resolve (its sed substitution only matches the old same-line
-      # "datasource": "...", string form — confirmed live, hundreds of
-      # unresolved ${DS_PROMETHEUS} tokens remained, causing "No data" on
-      # nearly every panel). They're instead provisioned as static,
-      # pre-fixed JSON via ConfigMaps the grafana-sc-dashboard sidecar picks
-      # up automatically — see kubernetes/grafana-dashboards/ and
+      # node-exporter-full, longhorn, and minio are NOT provisioned here —
+      # every modern revision of the first two dashboards uses Grafana's
+      # newer per-panel object-form datasource ref ("datasource":
+      # {"type":"prometheus","uid":"${DS_PROMETHEUS}"}), which this chart's
+      # download_dashboards.sh can't resolve (its sed substitution only
+      # matches the old same-line "datasource": "...", string form —
+      # confirmed live, hundreds of unresolved ${DS_PROMETHEUS} tokens
+      # remained, causing "No data" on nearly every panel). MinIO's
+      # datasource resolves fine, but its queries hardcode job="$scrape_jobs"
+      # against a multi-select/include-all variable with no default, which
+      # can never exact-match — confirmed live. All three are instead
+      # provisioned as static, pre-fixed JSON via ConfigMaps the
+      # grafana-sc-dashboard sidecar picks up automatically (annotated
+      # grafana_folder=TuringPi so they land in the same folder as the rest)
+      # — see kubernetes/grafana-dashboards/ and
       # ansible/playbooks/04-cluster-addons.yml.
       k3s-cluster:          { gnetId: 15282, datasource: Prometheus }
       kubernetes-pvcs:      { gnetId: 13646, datasource: Prometheus }
       ingress-nginx:        { gnetId: 9614,  datasource: Prometheus }
-      # rev 1 ("MinIO {Official}") only references 5 pre-refactor metric
-      # names, none of which exist on our MinIO version — only the generic
-      # uptime panel worked. rev 18 matches our live minio_cluster_*/
-      # minio_node_* series.
-      minio:                { gnetId: 13502, revision: 18, datasource: Prometheus }
       # "Gitea" (13192) — no template variables, 15/16 referenced metrics
       # match our live Gitea metrics vs 12/14 for the previous 17802.
       gitea:                { gnetId: 13192, datasource: Prometheus }

@@ -102,6 +102,7 @@
       loop:
         - longhorn.json
         - node-exporter-full.json
+        - minio.json
 
     # node-exporter-full.json is ~680KB — kubectl apply's client-side
     # last-applied-configuration annotation has a 262144-byte cap and rejects
@@ -117,6 +118,7 @@
       loop:
         - { name: longhorn, file: longhorn.json }
         - { name: node-exporter-full, file: node-exporter-full.json }
+        - { name: minio, file: minio.json }
 
     - name: Label Grafana sidecar-loaded dashboard ConfigMaps
       ansible.builtin.command: >
@@ -127,6 +129,21 @@
       loop:
         - longhorn
         - node-exporter-full
+        - minio
+
+    # Places these dashboards in the same "TuringPi" folder as every other
+    # dashboard, via grafana.sidecar.dashboards.folderAnnotation in
+    # prometheus-stack.yml (default sidecar placement is "General").
+    - name: Annotate Grafana dashboard ConfigMaps with target folder
+      ansible.builtin.command: >
+        kubectl annotate configmap {{ item }}-grafana-dashboard
+        grafana_folder=TuringPi
+        --namespace monitoring --overwrite
+      changed_when: true
+      loop:
+        - longhorn
+        - node-exporter-full
+        - minio
 
     - name: Install kube-prometheus-stack
       ansible.builtin.command: >

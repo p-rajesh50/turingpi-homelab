@@ -49,11 +49,11 @@ agentic app runtime, secrets management, and remote access.
 | CM4 Node 3 | cm4-node-3 | 10.0.0.23 |
 | CM4 Node 4 | cm4-node-4 | 10.0.0.24 |
 
-### TrueNAS (FUTURE — do not configure yet)
+### TrueNAS
 
-| Device | Hostname | IP |
-|---|---|---|
-| TrueNAS Core (FreeBSD) | truenas | 10.0.0.97 (DHCP — static assignment pending, see build-order item 17) |
+| Device | Hostname | IP | Status |
+|---|---|---|---|
+| TrueNAS Core (FreeBSD) | truenas | 10.0.0.5 (static, confirmed) | ✅ Accessible at https://truenas.kloud-worx.com via Cloudflare Tunnel — HTTPS on port 443 with a `cloudflare-origin` certificate (valid until 2041) |
 
 ---
 
@@ -61,6 +61,7 @@ agentic app runtime, secrets management, and remote access.
 
 ```
 10.0.0.1          Router / gateway
+10.0.0.5          TrueNAS (static, confirmed) — https://truenas.kloud-worx.com via Cloudflare Tunnel
 10.0.0.10         Cluster 1 BMC (tpi1-bmc)
 10.0.0.11         rk1-control  (slot 1)
 10.0.0.12         rk1-worker-1 (slot 2, moved from slot 3) — also NFS server (mini-PCIe SATA adapter, path confirmed /dev/sda2)
@@ -70,7 +71,6 @@ agentic app runtime, secrets management, and remote access.
 10.0.0.20-24      Cluster 2 (future)
 10.0.0.30-49      MetalLB LoadBalancer pool (Cluster 1)
 10.0.0.50-69      MetalLB LoadBalancer pool (Cluster 2, future)
-10.0.0.97         TrueNAS (DHCP, static pending — see build-order item 17)
 10.0.0.100-199    DHCP pool (router managed)
 ```
 
@@ -102,10 +102,10 @@ agentic app runtime, secrets management, and remote access.
 14. ⬜ Cluster 1 — Cloudflare Tunnel (web UIs at kloud-worx.com) — re-run against new cluster
 15. ⬜ Jetson Orin NX — deferred indefinitely (module removed from board)
 16. ⬜ Jetson Nano — JetPack 4.6 flash (manual) + Ansible setup
-17. ⬜ TrueNAS — SMB + NFS + Jellyfin (FreeBSD Core). **Prerequisite:** TrueNAS
-    is on the network at 10.0.0.97 via DHCP, not static — assign it a static IP
-    first (reserve 10.0.0.97 for its MAC in the router's DHCP settings, or set
-    it statically on TrueNAS itself) before configuring NFS/backups against it.
+17. ⬜ TrueNAS — SMB + NFS + Jellyfin (FreeBSD Core). Static IP (10.0.0.5) is
+    confirmed and the admin UI is reachable at https://truenas.kloud-worx.com
+    via Cloudflare Tunnel — SMB/NFS export configuration and Longhorn backup
+    target setup are still not done.
 18. ⬜ Cluster 2 — CM4 cluster + Pi-hole + dev sandbox
 
 ---
@@ -306,7 +306,7 @@ https://minio.kloud-worx.com      MinIO S3 console
 https://prefect.kloud-worx.com    Prefect orchestration UI
 https://headlamp.kloud-worx.com   Headlamp K8s UI
 https://portainer.kloud-worx.com  Portainer multi-cluster UI
-https://truenas.kloud-worx.com    TrueNAS admin (future)
+https://truenas.kloud-worx.com    TrueNAS admin
 ```
 
 ---

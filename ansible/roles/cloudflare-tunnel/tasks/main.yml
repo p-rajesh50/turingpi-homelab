@@ -92,6 +92,16 @@
             - hostname: portainer.kloud-worx.com
               service: http://portainer.portainer.svc.cluster.local:9000
 
+            # TrueNAS admin UI — standalone box on the LAN (not a cluster
+            # Service), HTTPS with a Cloudflare Origin Certificate.
+            # noTLSVerify is required because that cert is issued by
+            # Cloudflare's own origin CA, which cloudflared doesn't trust
+            # by default for arbitrary origins.
+            - hostname: truenas.kloud-worx.com
+              service: https://10.0.0.5
+              originRequest:
+                noTLSVerify: true
+
             # Catch-all
             - service: http_status:404
 

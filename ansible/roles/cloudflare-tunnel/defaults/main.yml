@@ -22,6 +22,7 @@ cloudflare_tunnel_hostnames:
   - prefect.kloud-worx.com
   - headlamp.kloud-worx.com
   - portainer.kloud-worx.com
+  - truenas.kloud-worx.com
 
 # Hostnames protected by Cloudflare Access. jupyter.kloud-worx.com and
 # llm.kloud-worx.com are intentionally left out of this list.
@@ -34,3 +35,4 @@ cloudflare_access_hostnames:
   - vault.kloud-worx.com
   - gitea.kloud-worx.com
   - prefect.kloud-worx.com
+  - truenas.kloud-worx.com

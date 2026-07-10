@@ -34,13 +34,26 @@ grafana:
             path: /var/lib/grafana/dashboards/default
   dashboards:
     default:
-      node-exporter-full:   { gnetId: 1860,  datasource: Prometheus }
+      # Without an explicit "revision", the chart's dashboard-download init
+      # container defaults to revision 1 (the oldest, not the latest) for
+      # every gnetId — several of these are pinned below because revision 1
+      # predates current metric-naming schemes and showed no/partial data.
+      node-exporter-full:   { gnetId: 1860,  revision: 33, datasource: Prometheus }
       k3s-cluster:          { gnetId: 15282, datasource: Prometheus }
-      longhorn:             { gnetId: 13032, datasource: Prometheus }
+      # "Longhorn (updated)" — gnetId 13032 (rev 1 default) is "Longhorn
+      # Example v1.1.0", a 2-panel stub. 16888's 19 referenced metrics all
+      # match longhorn-manager's real /metrics output (verified live).
+      longhorn:             { gnetId: 16888, datasource: Prometheus }
       kubernetes-pvcs:      { gnetId: 13646, datasource: Prometheus }
       ingress-nginx:        { gnetId: 9614,  datasource: Prometheus }
-      minio:                { gnetId: 13502, datasource: Prometheus }
-      gitea:                { gnetId: 17802, datasource: Prometheus }
+      # rev 1 ("MinIO {Official}") only references 5 pre-refactor metric
+      # names, none of which exist on our MinIO version — only the generic
+      # uptime panel worked. rev 18 matches our live minio_cluster_*/
+      # minio_node_* series.
+      minio:                { gnetId: 13502, revision: 18, datasource: Prometheus }
+      # "Gitea" (13192) — no template variables, 15/16 referenced metrics
+      # match our live Gitea metrics vs 12/14 for the previous 17802.
+      gitea:                { gnetId: 13192, datasource: Prometheus }
       cilium:               { gnetId: 16611, datasource: Prometheus }
 
 prometheus:

@@ -57,6 +57,15 @@ spec:
     - port: prometheus
       path: /metrics
       interval: 30s
+      # The gnetId-16611 Cilium dashboard hardcodes k8s_app="cilium" on every
+      # panel query, but our scraped series carry no such label (only the
+      # ServiceMonitor's default target labels: job, namespace, pod, service,
+      # instance) — confirmed live via the Prometheus API. Inject it directly
+      # rather than relying on pod/Service label propagation.
+      metricRelabelings:
+        - action: replace
+          targetLabel: k8s_app
+          replacement: cilium
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor

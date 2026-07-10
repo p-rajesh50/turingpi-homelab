@@ -61,6 +61,9 @@
         helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx
         --namespace ingress-nginx --create-namespace
         --set controller.service.type=LoadBalancer
+        --set controller.metrics.enabled=true
+        --set controller.metrics.serviceMonitor.enabled=true
+        --set controller.metrics.serviceMonitor.additionalLabels.release=monitoring
         --wait --timeout 10m
       changed_when: true
 
@@ -117,6 +120,7 @@
         - minio-servicemonitor.yml
         - gitea-servicemonitor.yml
         - cilium-servicemonitor.yml
+        - longhorn-servicemonitor.yml
 
     - name: Apply ServiceMonitor manifests
       ansible.builtin.command: "kubectl apply -f /tmp/{{ item }}"
@@ -125,6 +129,7 @@
         - minio-servicemonitor.yml
         - gitea-servicemonitor.yml
         - cilium-servicemonitor.yml
+        - longhorn-servicemonitor.yml
 
     # ── Headlamp ──────────────────────────────────────────────────────────────
     - name: Install Headlamp

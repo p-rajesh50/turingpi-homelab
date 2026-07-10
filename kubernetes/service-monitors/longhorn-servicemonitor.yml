@@ -1,0 +1,24 @@
+---
+# Longhorn's manager pods expose Prometheus metrics on the existing
+# longhorn-backend Service (port "manager", 9500) — no extra Service needed
+# (unlike Cilium, which required hand-written headless Services). Confirmed
+# live: curl to a longhorn-manager pod's :9500/metrics returns longhorn_*
+# series, but nothing was scraping it before this ServiceMonitor.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: longhorn
+  namespace: longhorn-system
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - longhorn-system
+  selector:
+    matchLabels:
+      app: longhorn-manager
+  endpoints:
+    - port: manager
+      path: /metrics
+      interval: 30s

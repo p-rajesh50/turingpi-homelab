@@ -75,9 +75,10 @@
             - hostname: litellm.kloud-worx.com
               service: http://litellm.litellm.svc.cluster.local:80
 
-            # MinIO S3 Console
+            # MinIO S3 Console — the "minio" Service only exposes port 9000
+            # (S3 API); the console UI on 9001 is only on "minio-console".
             - hostname: minio.kloud-worx.com
-              service: http://minio.minio.svc.cluster.local:9001
+              service: http://minio-console.minio.svc.cluster.local:9001
 
             # Prefect orchestration UI
             - hostname: prefect.kloud-worx.com

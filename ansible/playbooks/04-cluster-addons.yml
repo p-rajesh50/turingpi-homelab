@@ -131,6 +131,47 @@
         - cilium-servicemonitor.yml
         - longhorn-servicemonitor.yml
 
+    # Longhorn and Node Exporter Full dashboards can't be provisioned via the
+    # chart's gnetId/dashboards.default mechanism — every modern revision of
+    # both uses a per-panel object-form datasource ref that the chart's sed-
+    # based download_dashboards.sh can't resolve (see prometheus-stack.yml
+    # comment). Instead they're loaded as pre-fixed static JSON via ConfigMaps
+    # labeled grafana_dashboard=1, which the grafana-sc-dashboard sidecar
+    # (already running, part of the kube-prometheus-stack chart) watches for.
+    - name: Copy Grafana dashboard JSON to control plane
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../kubernetes/grafana-dashboards/{{ item }}"
+        dest: "/tmp/{{ item }}"
+        mode: "0644"
+      loop:
+        - longhorn.json
+        - node-exporter-full.json
+
+    # node-exporter-full.json is ~680KB — kubectl apply's client-side
+    # last-applied-configuration annotation has a 262144-byte cap and rejects
+    # it ("Too long"), so this uses --server-side (no annotation) instead of
+    # the usual dry-run|apply pattern.
+    - name: Create Grafana sidecar-loaded dashboard ConfigMaps
+      ansible.builtin.shell: >
+        kubectl create configmap {{ item.name }}-grafana-dashboard
+        --from-file={{ item.file }}=/tmp/{{ item.file }}
+        --namespace monitoring
+        --dry-run=client -o yaml | kubectl apply --server-side --force-conflicts -f -
+      changed_when: true
+      loop:
+        - { name: longhorn, file: longhorn.json }
+        - { name: node-exporter-full, file: node-exporter-full.json }
+
+    - name: Label Grafana sidecar-loaded dashboard ConfigMaps
+      ansible.builtin.command: >
+        kubectl label configmap {{ item }}-grafana-dashboard
+        grafana_dashboard=1
+        --namespace monitoring --overwrite
+      changed_when: true
+      loop:
+        - longhorn
+        - node-exporter-full
+
     # ── Headlamp ──────────────────────────────────────────────────────────────
     - name: Install Headlamp
       ansible.builtin.command: >

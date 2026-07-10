@@ -38,12 +38,19 @@ grafana:
       # container defaults to revision 1 (the oldest, not the latest) for
       # every gnetId — several of these are pinned below because revision 1
       # predates current metric-naming schemes and showed no/partial data.
-      node-exporter-full:   { gnetId: 1860,  revision: 33, datasource: Prometheus }
+      #
+      # node-exporter-full and longhorn are NOT provisioned here — every
+      # modern revision of both dashboards uses Grafana's newer per-panel
+      # object-form datasource ref ("datasource": {"type":"prometheus",
+      # "uid":"${DS_PROMETHEUS}"}), which this chart's download_dashboards.sh
+      # can't resolve (its sed substitution only matches the old same-line
+      # "datasource": "...", string form — confirmed live, hundreds of
+      # unresolved ${DS_PROMETHEUS} tokens remained, causing "No data" on
+      # nearly every panel). They're instead provisioned as static,
+      # pre-fixed JSON via ConfigMaps the grafana-sc-dashboard sidecar picks
+      # up automatically — see kubernetes/grafana-dashboards/ and
+      # ansible/playbooks/04-cluster-addons.yml.
       k3s-cluster:          { gnetId: 15282, datasource: Prometheus }
-      # "Longhorn (updated)" — gnetId 13032 (rev 1 default) is "Longhorn
-      # Example v1.1.0", a 2-panel stub. 16888's 19 referenced metrics all
-      # match longhorn-manager's real /metrics output (verified live).
-      longhorn:             { gnetId: 16888, datasource: Prometheus }
       kubernetes-pvcs:      { gnetId: 13646, datasource: Prometheus }
       ingress-nginx:        { gnetId: 9614,  datasource: Prometheus }
       # rev 1 ("MinIO {Official}") only references 5 pre-refactor metric

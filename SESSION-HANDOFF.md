@@ -1,5 +1,5 @@
 # TuringPi Homelab — Session Handoff Document
-# Date: July 9, 2026 (Chunk 4-5 complete — see STATUS below)
+# Date: July 10, 2026 (TrueNAS live, Grafana dashboards fixed — see STATUS below)
 # Use this to start a new Claude chat session with full context
 
 ---
@@ -76,8 +76,51 @@ pre-rebuild architecture), and `docs/medium-series-outline.md` (planned
 services live at kloud-worx.com, Gmail alerting active for
 critical/high/warning events, `make cluster-health` passes cleanly.
 
+**July 10, 2026 — TrueNAS live, Grafana dashboards fixed, MinIO/Portainer verified:**
+
+- **TrueNAS integration (partial — web UI only)**: TrueNAS is live at its
+  static IP **10.0.0.5** and reachable at **https://truenas.kloud-worx.com**
+  via the Cloudflare Tunnel, protected by the same Google OAuth Access policy
+  as every other service (verified: unauthenticated requests to the public
+  hostname 302 to the Access login page). TrueNAS uses a Cloudflare Origin
+  Certificate (valid until 2041), so the tunnel's ingress rule sets
+  `originRequest.noTLSVerify: true`. Added to `ansible/roles/cloudflare-tunnel/`
+  (both `tasks/main.yml` ingress config and `defaults/main.yml` hostname
+  lists) so it persists on future `make cloudflare` runs. Note: direct LAN
+  access to `https://10.0.0.5` bypasses Access entirely (Cloudflare can't see
+  traffic that never transits its edge) — investigated and confirmed this is
+  expected/inherent to the tunnel architecture, not a misconfiguration;
+  accepted as-is for a homelab. NFS/SMB shares, Longhorn backup target, and
+  scheduled snapshots (the rest of roadmap item 1) are still not done.
+- **Grafana dashboard fixes**: Longhorn, MinIO, and Node Exporter Full were
+  all showing "No data" despite correct-looking gnetId config. Root causes
+  varied — Longhorn/Node-Exporter-Full: the chart's dashboard-download sed
+  substitution can't resolve modern per-panel object-form datasource refs
+  (`${DS_PROMETHEUS}`); MinIO: a multi-select template variable
+  (`job="$scrape_jobs"`) that could never exact-match. Fixed by hand-editing
+  pre-resolved JSON (checked into `kubernetes/grafana-dashboards/`) loaded via
+  ConfigMaps the `grafana-sc-dashboard` sidecar picks up — reordered in
+  `ansible/playbooks/04-cluster-addons.yml` to run *before* the
+  kube-prometheus-stack Helm upgrade (the sidecar only does a one-time
+  initial sync at Grafana pod startup) and moved into the same "TuringPi"
+  folder as every other dashboard via `folderAnnotation` +
+  `foldersFromFilesStructure`. Verified end-to-end with a genuinely fresh
+  Grafana pod, not just a config reload. All **8 dashboards** now live in the
+  TuringPi folder with real data: Cilium, Gitea, K3S cluster monitoring,
+  Longhorn (updated), MinIO Dashboard, NGINX Ingress controller, Node
+  Exporter Full, kubernetes-persistent-volumes.
+- **MinIO credentials**: `secret/minio` in Vault updated (confirmed via Vault
+  KV metadata — version 2, updated today).
+- **Portainer**: confirmed already operational at
+  https://portainer.kloud-worx.com with known credentials stored in Vault —
+  no changes needed (a proposed fix to pre-seed the admin password via
+  `adminPassword.existingSecret` was evaluated and explicitly declined this
+  session since Portainer already works and wiping its PVC to force
+  reinitialization wasn't worth the disruption).
+
 **Next up:** see the revised roadmap in "Follow-Up Items for Future
-Sessions" below — TrueNAS integration is next (item 1).
+Sessions" below — the rest of TrueNAS integration (NFS/SMB shares, Longhorn
+backup target) is next.
 
 ---
 
@@ -108,6 +151,7 @@ Sessions" below — TrueNAS integration is next (item 1).
 
 ```
 10.0.0.1          Router (Xfinity XB8 gateway)
+10.0.0.5          TrueNAS — static, confirmed live — https://truenas.kloud-worx.com
 10.0.0.10         Cluster 1 BMC (tpi1-bmc) — static IP configured
 10.0.0.11         rk1-control (slot 1) — also Tailscale subnet router
 10.0.0.12         rk1-worker-1 (slot 2, MOVED from slot 3)
@@ -453,6 +497,7 @@ https://litellm.kloud-worx.com    LiteLLM API gateway (Access-protected)
 https://minio.kloud-worx.com      MinIO S3 console (Access-protected)
 https://headlamp.kloud-worx.com   Headlamp K8s UI (Access-protected)
 https://portainer.kloud-worx.com  Portainer multi-cluster UI (Access-protected)
+https://truenas.kloud-worx.com    TrueNAS admin UI (Access-protected, live)
 https://prefect.kloud-worx.com    Prefect UI (Access-protected, not deployed yet)
 https://jupyter.kloud-worx.com    JupyterHub (not deployed yet, no Access policy)
 https://llm.kloud-worx.com        Open WebUI (deferred, Orin NX removed from board)
@@ -471,16 +516,10 @@ http://10.0.0.40/v1   LiteLLM        http://10.0.0.35       MinIO
 
 ### Roadmap (priority order)
 
-1. **TrueNAS Integration** — TrueNAS is on the network at **10.0.0.97**,
-   currently via **DHCP, not static** — assigning it a static IP is a
-   prerequisite before any of the work below, since a DHCP lease can change
-   on renewal and silently break the Longhorn backup target URL. Two ways to
-   do it, either is fine:
-   1. Reserve `10.0.0.97` for TrueNAS's MAC address in the router's (XB8)
-      DHCP settings — easiest, no changes on the TrueNAS side.
-   2. Set a static IP directly in TrueNAS's own network settings.
-
-   Once static:
+1. **TrueNAS Integration** — ✅ static IP (**10.0.0.5**) confirmed and the
+   admin web UI is live at https://truenas.kloud-worx.com via the Cloudflare
+   Tunnel (Google OAuth-protected, Origin Certificate valid until 2041) — see
+   the July 10, 2026 STATUS entry above. Remaining work:
    - Configure an NFS share on TrueNAS for Longhorn backups.
    - Set Longhorn's backup target to the TrueNAS NFS share.
    - Configure scheduled Longhorn volume snapshots.
@@ -675,13 +714,14 @@ Plan: Pi-hole (primary 10.0.0.21, secondary 10.0.0.22),
 
 ---
 
-## TrueNAS — Not Started
+## TrueNAS — Web UI Live, Media/Backup Not Started
 
 ```
-FreeBSD (TrueNAS Core), planned at 10.0.0.5
-Media: SMB + NFS + Jellyfin
-Backup target for Longhorn
-Not started yet — after CM4 cluster
+FreeBSD (TrueNAS Core), live at 10.0.0.5 (static, confirmed)
+Admin UI: https://truenas.kloud-worx.com (Cloudflare Tunnel, Google OAuth,
+          Origin Certificate valid until 2041)
+Media: SMB + NFS + Jellyfin — not configured yet
+Backup target for Longhorn — not configured yet
 ```
 
 ---
@@ -712,14 +752,15 @@ Current state: the full stack is live and verified end-to-end (K3s+Cilium,
 storage, addons, Vault/secrets, AI stack, dev tools, Tailscale control-plane-only,
 Cloudflare Tunnel with Google OAuth). Chunk 4 (Prometheus alerting with Gmail
 SMTP) and Chunk 5 (Grafana dashboards + ServiceMonitors) are both done and
-verified live — see the July 9, 2026 STATUS entry above. All 3 nodes Ready,
-all pods Running, make cluster-health passes cleanly. Nothing urgent right now.
+verified live. TrueNAS is live at 10.0.0.5 (static) and
+https://truenas.kloud-worx.com, and all 8 Grafana dashboards render real data
+— see the July 10, 2026 STATUS entry above. All 3 nodes Ready, all pods
+Running, make cluster-health passes cleanly. Nothing urgent right now.
 
-NEXT TASK: TrueNAS Integration (roadmap item 1) — TrueNAS is on the network
-at 10.0.0.97 via DHCP; the first step is giving it a static IP (reserve
-10.0.0.97 for its MAC in the router's DHCP settings, or set it statically on
-TrueNAS itself) before configuring an NFS share for Longhorn backups, setting
-Longhorn's backup target, and scheduling volume snapshots.
+NEXT TASK: finish TrueNAS Integration (roadmap item 1) — static IP and web UI
+access are done; what's left is configuring an NFS share on TrueNAS for
+Longhorn backups, setting Longhorn's backup target, and scheduling volume
+snapshots.
 
 See "Follow-Up Items for Future Sessions" for the full revised roadmap
 (TrueNAS → Slot 3/Orin NX investigation → Orin NX AI inference → move

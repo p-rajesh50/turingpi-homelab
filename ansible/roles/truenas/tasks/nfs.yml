@@ -1,0 +1,47 @@
+---
+- name: Fetch existing NFS shares from TrueNAS
+  ansible.builtin.uri:
+    url: "{{ truenas_api_url }}/sharing/nfs"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ truenas_api_key }}"
+      Content-Type: "application/json"
+    validate_certs: "{{ truenas_validate_certs }}"
+    status_code: 200
+  register: existing_nfs_shares
+  tags: [truenas, truenas-nfs]
+
+- name: Build list of existing NFS share paths
+  ansible.builtin.set_fact:
+    existing_nfs_paths: "{{ existing_nfs_shares.json | map(attribute='paths') | list | flatten }}"
+  tags: [truenas, truenas-nfs]
+
+- name: Create NFS exports (skip if path already exported)
+  ansible.builtin.uri:
+    url: "{{ truenas_api_url }}/sharing/nfs"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ truenas_api_key }}"
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      paths: ["{{ item.path }}"]
+      comment: "{{ item.comment }}"
+      hosts: "{{ item.hosts }}"
+      alldirs: "{{ item.alldirs }}"
+      ro: "{{ item.readonly }}"
+      maproot_user: "{{ item.maproot_user }}"
+      maproot_group: "{{ item.maproot_group }}"
+    validate_certs: "{{ truenas_validate_certs }}"
+    status_code: [200, 201]
+  loop: "{{ truenas_nfs_exports }}"
+  when: item.path not in existing_nfs_paths
+  register: nfs_results
+  tags: [truenas, truenas-nfs]
+
+- name: Report NFS export results
+  ansible.builtin.debug:
+    msg: "NFS export {{ item.item.path }} — {{ 'CREATED' if item.changed else 'SKIPPED (already exists)' }}"
+  loop: "{{ nfs_results.results }}"
+  when: nfs_results.results is defined
+  tags: [truenas, truenas-nfs]

@@ -1,0 +1,29 @@
+---
+# TrueNAS connection
+truenas_host: "10.0.0.5"
+truenas_api_url: "https://{{ truenas_host }}/api/v2.0"
+truenas_validate_certs: false  # using Cloudflare Origin cert on LAN; set true if using public FQDN
+
+# Pool and dataset config
+truenas_pool: "SSDStorage"
+truenas_datasets:
+  - name: "{{ truenas_pool }}/kubernetes"
+    comment: "Kubernetes cluster data"
+  - name: "{{ truenas_pool }}/kubernetes/longhorn-backups"
+    comment: "Longhorn volume backups from K3s cluster"
+  - name: "{{ truenas_pool }}/kubernetes/cluster-configs"
+    comment: "Cluster configuration backups"
+
+# NFS export for longhorn-backups
+truenas_nfs_exports:
+  - path: "/mnt/{{ truenas_pool }}/kubernetes/longhorn-backups"
+    comment: "Longhorn backup target — K3s cluster"
+    hosts:
+      - "10.0.0.11"   # rk1-control
+      - "10.0.0.12"   # rk1-worker-1
+      - "10.0.0.13"   # rk1-worker-2
+    alldirs: false
+    readonly: false
+    root_squash: false   # required by Longhorn for backup writes
+    maproot_user: "root"
+    maproot_group: "wheel"

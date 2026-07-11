@@ -294,6 +294,42 @@ vault-unseal:
 vault-status:
 	@kubectl exec vault-0 -n vault -- vault status 2>/dev/null || echo "Vault not running"
 
+# vault-check: Verify Vault is reachable before any operation that needs secrets
+.PHONY: vault-check
+vault-check:
+	@echo "Checking Vault connectivity..."
+	@curl -sf http://127.0.0.1:8200/v1/sys/health > /dev/null || \
+		(echo "ERROR: Vault not reachable. Run: kubectl port-forward -n vault svc/vault 8200:8200 &" && exit 1)
+	@test -n "$$VAULT_TOKEN" || \
+		(echo "ERROR: VAULT_TOKEN not set. Run: export VAULT_TOKEN=\$$(python3 -c \"import json; print(json.load(open('/home/p_raj/.vault-init.json'))['root_token'])\")" && exit 1)
+	@echo "Vault OK"
+
+## truenas: Configure TrueNAS datasets and NFS exports
+.PHONY: truenas
+truenas: vault-check
+	ansible-playbook \
+		-i ansible/inventory/hosts.yml \
+		ansible/playbooks/12-truenas.yml \
+		$(ANSIBLE_ARGS)
+
+## truenas-datasets: Create ZFS datasets on TrueNAS only
+.PHONY: truenas-datasets
+truenas-datasets: vault-check
+	ansible-playbook \
+		-i ansible/inventory/hosts.yml \
+		ansible/playbooks/12-truenas.yml \
+		--tags truenas-datasets \
+		$(ANSIBLE_ARGS)
+
+## truenas-nfs: Configure NFS exports on TrueNAS only
+.PHONY: truenas-nfs
+truenas-nfs: vault-check
+	ansible-playbook \
+		-i ansible/inventory/hosts.yml \
+		ansible/playbooks/12-truenas.yml \
+		--tags truenas-nfs \
+		$(ANSIBLE_ARGS)
+
 # ─────────────────────────────────────────────────────────────────────────────
 # REMOTE ACCESS
 # ─────────────────────────────────────────────────────────────────────────────

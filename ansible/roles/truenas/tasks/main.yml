@@ -1,0 +1,16 @@
+---
+# ansible/roles/truenas/tasks/main.yml
+# Entry point for the truenas role — includes dataset creation, NFS export
+# configuration, and NFS service enable/start, each independently tagged.
+
+- name: Configure TrueNAS ZFS datasets
+  ansible.builtin.include_tasks: datasets.yml
+  tags: [truenas, truenas-datasets]
+
+- name: Configure TrueNAS NFS exports
+  ansible.builtin.include_tasks: nfs.yml
+  tags: [truenas, truenas-nfs]
+
+- name: Ensure TrueNAS NFS service is enabled and running
+  ansible.builtin.include_tasks: nfs-service.yml
+  tags: [truenas, truenas-nfs]

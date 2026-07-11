@@ -1,0 +1,42 @@
+---
+- name: Fetch existing ZFS datasets from TrueNAS
+  ansible.builtin.uri:
+    url: "{{ truenas_api_url }}/pool/dataset"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ truenas_api_key }}"
+      Content-Type: "application/json"
+    validate_certs: "{{ truenas_validate_certs }}"
+    status_code: 200
+  register: existing_datasets
+  tags: [truenas, truenas-datasets]
+
+- name: Build list of existing dataset names
+  ansible.builtin.set_fact:
+    existing_dataset_names: "{{ existing_datasets.json | map(attribute='name') | list }}"
+  tags: [truenas, truenas-datasets]
+
+- name: Create TrueNAS datasets (skip if already exists)
+  ansible.builtin.uri:
+    url: "{{ truenas_api_url }}/pool/dataset"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ truenas_api_key }}"
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      name: "{{ item.name }}"
+      comments: "{{ item.comment }}"
+    validate_certs: "{{ truenas_validate_certs }}"
+    status_code: [200, 201]
+  loop: "{{ truenas_datasets }}"
+  when: item.name not in existing_dataset_names
+  register: dataset_results
+  tags: [truenas, truenas-datasets]
+
+- name: Report dataset creation results
+  ansible.builtin.debug:
+    msg: "Dataset {{ item.item.name }} — {{ 'CREATED' if item.changed else 'SKIPPED (already exists)' }}"
+  loop: "{{ dataset_results.results }}"
+  when: dataset_results.results is defined
+  tags: [truenas, truenas-datasets]

@@ -1,0 +1,33 @@
+---
+# Playbook: 12-truenas.yml
+# Purpose: Configure TrueNAS datasets and NFS exports for cluster storage
+# Prerequisites:
+#   - Vault is unsealed and port-forwarded on localhost:8200
+#   - VAULT_ADDR and VAULT_TOKEN are set in the shell
+#   - secret/truenas api_key is stored in Vault
+#
+# Usage:
+#   make truenas                          # full run
+#   ansible-playbook ... --tags truenas-datasets   # datasets only
+#   ansible-playbook ... --tags truenas-nfs        # NFS only
+#
+# NOTE: This playbook runs against localhost (Ansible controller) and
+# calls the TrueNAS API directly — no SSH to TrueNAS required.
+
+- name: Configure TrueNAS storage and NFS exports
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+
+  vars:
+    # Pull TrueNAS API key from Vault
+    # Requires: VAULT_ADDR and VAULT_TOKEN set in environment
+    truenas_api_key: "{{ lookup('community.hashi_vault.hashi_vault',
+      'secret=secret/data/truenas:API_KEY
+       url=http://127.0.0.1:8200
+       token=' + lookup('env', 'VAULT_TOKEN')) }}"
+
+  roles:
+    - role: truenas
+      tags: [truenas]

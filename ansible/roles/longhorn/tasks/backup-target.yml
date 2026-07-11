@@ -1,0 +1,38 @@
+---
+# ansible/roles/longhorn/tasks/backup-target.yml
+# Points Longhorn's backup target at the TrueNAS NFS export
+# (10.0.0.5:/mnt/SSDStorage/kubernetes/longhorn-backups). NFS backup targets
+# need no credential secret, so backup-target-credential-secret is left as-is.
+# Only included when the longhorn-backup-target tag is explicitly requested —
+# never part of the default (untagged) role run.
+
+- name: Set Longhorn backup-target to TrueNAS NFS export
+  ansible.builtin.shell: |
+    kubectl -n longhorn-system patch settings.longhorn.io backup-target \
+      --type=merge \
+      --patch='{"value":"{{ longhorn_backup_target }}"}'
+  args:
+    executable: /bin/bash
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  changed_when: true
+  tags: [longhorn-backup-target]
+
+- name: Read back Longhorn backup-target setting
+  ansible.builtin.command: >
+    kubectl -n longhorn-system get settings.longhorn.io backup-target
+    -o jsonpath={.value}
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  register: longhorn_backup_target_check
+  changed_when: false
+  tags: [longhorn-backup-target]
+
+- name: Assert backup-target was applied correctly
+  ansible.builtin.assert:
+    that: longhorn_backup_target_check.stdout == longhorn_backup_target
+    fail_msg: >-
+      Longhorn backup-target is "{{ longhorn_backup_target_check.stdout }}",
+      expected "{{ longhorn_backup_target }}"
+    success_msg: "Longhorn backup-target confirmed: {{ longhorn_backup_target_check.stdout }}"
+  tags: [longhorn-backup-target]

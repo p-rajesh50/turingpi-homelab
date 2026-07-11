@@ -1,0 +1,20 @@
+---
+# ansible/playbooks/03c-longhorn-backup-target.yml
+# Sets Longhorn's backup target to the TrueNAS NFS export
+# (10.0.0.5:/mnt/SSDStorage/kubernetes/longhorn-backups). Run after
+# make storage and after the TrueNAS NFS export has been created
+# (make truenas-nfs).
+#
+# Usage:
+#   make longhorn-backup-target
+#   ansible-playbook ... --tags longhorn-backup-target
+
+- name: Configure Longhorn backup target
+  hosts: k8s_control
+  become: false
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+  roles:
+    - role: longhorn
+      tags: [longhorn-backup-target]

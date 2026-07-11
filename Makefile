@@ -142,6 +142,11 @@ longhorn-nvme:
 	ansible-playbook ansible/playbooks/03b-longhorn-nvme.yml \
 		-i $(INVENTORY) $(ANSIBLE_ARGS)
 
+.PHONY: longhorn-backup-target
+longhorn-backup-target: vault-check
+	ansible-playbook ansible/playbooks/03c-longhorn-backup-target.yml \
+		-i $(INVENTORY) --tags longhorn-backup-target $(ANSIBLE_ARGS)
+
 .PHONY: addons
 addons:
 	ansible-playbook ansible/playbooks/04-cluster-addons.yml \

@@ -67,3 +67,10 @@
     msg:
       - "Longhorn UI:     kubectl port-forward -n longhorn-system svc/longhorn-frontend 8080:80"
       - "StorageClasses:  longhorn (default, NVMe replicated) | nfs-shared (SATA, shared)"
+
+# Only runs when --tags longhorn-backup-target is explicitly requested (see
+# ansible/playbooks/03c-longhorn-backup-target.yml) — not part of the default
+# untagged role run, so make storage/make longhorn-nvme are unaffected.
+- name: Configure Longhorn backup target
+  ansible.builtin.include_tasks: backup-target.yml
+  tags: [longhorn-backup-target]

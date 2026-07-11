@@ -1,0 +1,19 @@
+---
+# ansible/playbooks/03d-longhorn-recurring-jobs.yml
+# Configures recurring snapshot + backup schedules for the Vault volume
+# only (pvc-b5cb36bc-5316-41ae-82a0-b8e0c54d00ae / vault/data-vault-0).
+# Run after make longhorn-backup-target — backups need a backup target set.
+#
+# Usage:
+#   make longhorn-recurring-jobs
+#   ansible-playbook ... --tags longhorn-recurring-jobs
+
+- name: Configure Longhorn recurring jobs
+  hosts: k8s_control
+  become: false
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+  roles:
+    - role: longhorn
+      tags: [longhorn-recurring-jobs]

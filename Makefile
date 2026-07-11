@@ -147,6 +147,11 @@ longhorn-backup-target: vault-check
 	ansible-playbook ansible/playbooks/03c-longhorn-backup-target.yml \
 		-i $(INVENTORY) --tags longhorn-backup-target $(ANSIBLE_ARGS)
 
+.PHONY: longhorn-recurring-jobs
+longhorn-recurring-jobs: vault-check
+	ansible-playbook ansible/playbooks/03d-longhorn-recurring-jobs.yml \
+		-i $(INVENTORY) --tags longhorn-recurring-jobs $(ANSIBLE_ARGS)
+
 .PHONY: addons
 addons:
 	ansible-playbook ansible/playbooks/04-cluster-addons.yml \

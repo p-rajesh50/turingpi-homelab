@@ -74,3 +74,9 @@
 - name: Configure Longhorn backup target
   ansible.builtin.include_tasks: backup-target.yml
   tags: [longhorn-backup-target]
+
+# Only runs when --tags longhorn-recurring-jobs is explicitly requested —
+# not part of the default untagged role run.
+- name: Configure Longhorn recurring jobs
+  ansible.builtin.include_tasks: recurring-jobs.yml
+  tags: [longhorn-recurring-jobs]

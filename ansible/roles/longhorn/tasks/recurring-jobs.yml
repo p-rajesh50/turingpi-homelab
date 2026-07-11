@@ -1,0 +1,80 @@
+---
+- name: Apply vault-snapshot RecurringJob
+  ansible.builtin.shell: |
+    kubectl apply -f - <<'MANIFEST'
+    apiVersion: longhorn.io/v1beta2
+    kind: RecurringJob
+    metadata:
+      name: vault-snapshot
+      namespace: longhorn-system
+    spec:
+      name: vault-snapshot
+      cron: "{{ longhorn_recurring_job_cron }}"
+      task: "snapshot"
+      groups: []
+      retain: {{ longhorn_recurring_job_retain }}
+      concurrency: {{ longhorn_recurring_job_concurrency }}
+      labels: {}
+    MANIFEST
+  args:
+    executable: /bin/bash
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  changed_when: true
+  tags: [longhorn-recurring-jobs]
+
+- name: Apply vault-backup RecurringJob
+  ansible.builtin.shell: |
+    kubectl apply -f - <<'MANIFEST'
+    apiVersion: longhorn.io/v1beta2
+    kind: RecurringJob
+    metadata:
+      name: vault-backup
+      namespace: longhorn-system
+    spec:
+      name: vault-backup
+      cron: "{{ longhorn_recurring_job_cron }}"
+      task: "backup"
+      groups: []
+      retain: {{ longhorn_recurring_job_retain }}
+      concurrency: {{ longhorn_recurring_job_concurrency }}
+      labels: {}
+    MANIFEST
+  args:
+    executable: /bin/bash
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  changed_when: true
+  tags: [longhorn-recurring-jobs]
+
+- name: Label Vault volume for vault-snapshot and vault-backup recurring jobs
+  ansible.builtin.command: >
+    kubectl -n longhorn-system label volumes.longhorn.io {{ longhorn_vault_volume }}
+    recurring-job.longhorn.io/vault-snapshot=enabled
+    recurring-job.longhorn.io/vault-backup=enabled
+    --overwrite
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  changed_when: true
+  tags: [longhorn-recurring-jobs]
+
+- name: Read back RecurringJobs
+  ansible.builtin.command: >
+    kubectl -n longhorn-system get recurringjobs.longhorn.io
+    vault-snapshot vault-backup -o name
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  register: longhorn_recurring_jobs_check
+  changed_when: false
+  tags: [longhorn-recurring-jobs]
+
+- name: Assert both RecurringJobs exist
+  ansible.builtin.assert:
+    that:
+      - "'recurringjob.longhorn.io/vault-snapshot' in longhorn_recurring_jobs_check.stdout"
+      - "'recurringjob.longhorn.io/vault-backup' in longhorn_recurring_jobs_check.stdout"
+    fail_msg: >-
+      Expected both vault-snapshot and vault-backup RecurringJobs, got:
+      {{ longhorn_recurring_jobs_check.stdout }}
+    success_msg: "Both vault-snapshot and vault-backup RecurringJobs confirmed."
+  tags: [longhorn-recurring-jobs]

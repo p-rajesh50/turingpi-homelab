@@ -1,0 +1,8 @@
+---
+- name: Deploy PostgreSQL
+  ansible.builtin.include_tasks: deploy.yml
+  tags: [postgresql, postgresql-deploy]
+
+- name: Configure PostgreSQL recurring jobs
+  ansible.builtin.include_tasks: recurring-jobs.yml
+  tags: [postgresql, postgresql-recurring-jobs]

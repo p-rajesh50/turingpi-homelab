@@ -1,0 +1,5 @@
+---
+postgres_version: "16"
+postgres_storage_size: "5Gi"
+postgres_db_name: "litellm"
+postgres_user: "litellm"

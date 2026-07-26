@@ -1,0 +1,18 @@
+---
+# ansible/playbooks/13-postgresql.yml
+# Deploys PostgreSQL 16 for LiteLLM (budget tracking, team management,
+# spend history). Requires Vault + External Secrets Operator (make vault).
+#
+# Usage:
+#   make postgresql
+#   ansible-playbook ... --tags postgresql-deploy
+#   ansible-playbook ... --tags postgresql-recurring-jobs
+
+- name: Deploy PostgreSQL for LiteLLM
+  hosts: k8s_control
+  become: false
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+  roles:
+    - role: postgresql

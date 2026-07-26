@@ -152,6 +152,11 @@ longhorn-recurring-jobs: vault-check
 	ansible-playbook ansible/playbooks/03d-longhorn-recurring-jobs.yml \
 		-i $(INVENTORY) --tags longhorn-recurring-jobs $(ANSIBLE_ARGS)
 
+.PHONY: postgresql
+postgresql: vault-check
+	ansible-playbook ansible/playbooks/13-postgresql.yml \
+		-i $(INVENTORY) --tags postgresql $(ANSIBLE_ARGS)
+
 .PHONY: addons
 addons:
 	ansible-playbook ansible/playbooks/04-cluster-addons.yml \

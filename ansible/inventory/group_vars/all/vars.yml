@@ -118,7 +118,10 @@ gitea_service_ip: "10.0.0.36"       # from MetalLB pool
 
 # Postgres
 postgres_version: "16"
-postgres_storage_size: "100Gi"       # Longhorn PVC
+postgres_storage_size: "5Gi"       # Longhorn PVC
+postgres_db_name: "litellm"
+postgres_user: "litellm"
+longhorn_postgres_volume: "pvc-f20b57fd-6299-4d74-891c-144f383e2437"  # discover via: kubectl get pvc postgres-data -n litellm -o jsonpath='{.spec.volumeName}'
 
 # ── Monitoring ────────────────────────────────────────────────────────────────
 grafana_service_ip: "10.0.0.37"     # from MetalLB pool

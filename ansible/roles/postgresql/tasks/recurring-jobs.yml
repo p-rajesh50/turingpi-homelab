@@ -1,0 +1,84 @@
+---
+# Requires longhorn_postgres_volume to be set to the actual Longhorn Volume
+# name (discovered post-deploy via: kubectl get pvc postgres-data -n litellm
+# -o jsonpath='{.spec.volumeName}') — see group_vars/all/vars.yml.
+
+- name: Apply postgres-snapshot RecurringJob
+  ansible.builtin.shell: |
+    kubectl apply -f - <<'MANIFEST'
+    apiVersion: longhorn.io/v1beta2
+    kind: RecurringJob
+    metadata:
+      name: postgres-snapshot
+      namespace: longhorn-system
+    spec:
+      name: postgres-snapshot
+      cron: "{{ longhorn_recurring_job_cron }}"
+      task: "snapshot"
+      groups: []
+      retain: {{ longhorn_recurring_job_retain }}
+      concurrency: {{ longhorn_recurring_job_concurrency }}
+      labels: {}
+    MANIFEST
+  args:
+    executable: /bin/bash
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  changed_when: true
+  tags: [postgresql-recurring-jobs]
+
+- name: Apply postgres-backup RecurringJob
+  ansible.builtin.shell: |
+    kubectl apply -f - <<'MANIFEST'
+    apiVersion: longhorn.io/v1beta2
+    kind: RecurringJob
+    metadata:
+      name: postgres-backup
+      namespace: longhorn-system
+    spec:
+      name: postgres-backup
+      cron: "{{ longhorn_recurring_job_cron }}"
+      task: "backup"
+      groups: []
+      retain: {{ longhorn_recurring_job_retain }}
+      concurrency: {{ longhorn_recurring_job_concurrency }}
+      labels: {}
+    MANIFEST
+  args:
+    executable: /bin/bash
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  changed_when: true
+  tags: [postgresql-recurring-jobs]
+
+- name: Label PostgreSQL volume for postgres-snapshot and postgres-backup recurring jobs
+  ansible.builtin.command: >
+    kubectl -n longhorn-system label volumes.longhorn.io {{ longhorn_postgres_volume }}
+    recurring-job.longhorn.io/postgres-snapshot=enabled
+    recurring-job.longhorn.io/postgres-backup=enabled
+    --overwrite
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  changed_when: true
+  tags: [postgresql-recurring-jobs]
+
+- name: Read back RecurringJobs
+  ansible.builtin.command: >
+    kubectl -n longhorn-system get recurringjobs.longhorn.io
+    postgres-snapshot postgres-backup -o name
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  register: postgres_recurring_jobs_check
+  changed_when: false
+  tags: [postgresql-recurring-jobs]
+
+- name: Assert both RecurringJobs exist
+  ansible.builtin.assert:
+    that:
+      - "'recurringjob.longhorn.io/postgres-snapshot' in postgres_recurring_jobs_check.stdout"
+      - "'recurringjob.longhorn.io/postgres-backup' in postgres_recurring_jobs_check.stdout"
+    fail_msg: >-
+      Expected both postgres-snapshot and postgres-backup RecurringJobs, got:
+      {{ postgres_recurring_jobs_check.stdout }}
+    success_msg: "Both postgres-snapshot and postgres-backup RecurringJobs confirmed."
+  tags: [postgresql-recurring-jobs]

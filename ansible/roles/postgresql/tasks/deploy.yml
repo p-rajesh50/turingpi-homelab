@@ -1,0 +1,172 @@
+---
+# PostgreSQL 16 for LiteLLM budget tracking, team management, and spend
+# history. Co-located in the litellm namespace since it's the only consumer.
+# Wiring LiteLLM's DATABASE_URL to this instance is a separate follow-up —
+# not done here.
+
+- name: Create litellm namespace
+  ansible.builtin.shell: kubectl create namespace litellm --dry-run=client -o yaml | kubectl apply -f -
+  args:
+    executable: /bin/bash
+  changed_when: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  tags: [postgresql, postgresql-deploy]
+
+# Self-provisioned here (rather than relying on the external-secrets role's
+# postgres-credentials stub, which targets a "databases" namespace nothing
+# creates) — same pattern litellm uses for its own llm-api-keys secret.
+- name: Create postgres-credentials ExternalSecret
+  ansible.builtin.copy:
+    dest: /tmp/postgres-external-secret.yml
+    mode: "0644"
+    content: |
+      ---
+      apiVersion: external-secrets.io/v1
+      kind: ExternalSecret
+      metadata:
+        name: postgres-credentials
+        namespace: litellm
+      spec:
+        refreshInterval: 1m
+        secretStoreRef:
+          name: vault-backend
+          kind: ClusterSecretStore
+        target:
+          name: postgres-credentials
+          creationPolicy: Owner
+        data:
+          - secretKey: POSTGRES_PASSWORD
+            remoteRef:
+              key: secret/postgres
+              property: POSTGRES_PASSWORD
+  tags: [postgresql, postgresql-deploy]
+
+- name: Apply postgres-credentials ExternalSecret
+  ansible.builtin.command: kubectl apply -f /tmp/postgres-external-secret.yml
+  changed_when: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  tags: [postgresql, postgresql-deploy]
+
+- name: Wait for postgres-credentials secret to sync from Vault
+  ansible.builtin.command: >
+    kubectl wait externalsecret/postgres-credentials -n litellm
+    --for=condition=Ready --timeout=90s
+  changed_when: false
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  tags: [postgresql, postgresql-deploy]
+
+- name: Deploy PostgreSQL PVC
+  ansible.builtin.copy:
+    dest: /tmp/postgres-pvc.yml
+    mode: "0644"
+    content: |
+      ---
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: postgres-data
+        namespace: litellm
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: longhorn
+        resources:
+          requests:
+            storage: {{ postgres_storage_size }}
+  tags: [postgresql, postgresql-deploy]
+
+- name: Apply PostgreSQL PVC
+  ansible.builtin.command: kubectl apply -f /tmp/postgres-pvc.yml
+  changed_when: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  tags: [postgresql, postgresql-deploy]
+
+- name: Deploy PostgreSQL Deployment and Service
+  ansible.builtin.copy:
+    dest: /tmp/postgres-deploy.yml
+    mode: "0644"
+    content: |
+      ---
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: postgres
+        namespace: litellm
+      spec:
+        replicas: 1
+        strategy:
+          type: Recreate
+        selector:
+          matchLabels:
+            app: postgres
+        template:
+          metadata:
+            labels:
+              app: postgres
+          spec:
+            containers:
+              - name: postgres
+                image: "postgres:{{ postgres_version }}"
+                ports:
+                  - containerPort: 5432
+                env:
+                  - name: POSTGRES_DB
+                    value: "{{ postgres_db_name }}"
+                  - name: POSTGRES_USER
+                    value: "{{ postgres_user }}"
+                  - name: PGDATA
+                    value: /var/lib/postgresql/data/pgdata
+                  - name: POSTGRES_PASSWORD
+                    valueFrom:
+                      secretKeyRef:
+                        name: postgres-credentials
+                        key: POSTGRES_PASSWORD
+                volumeMounts:
+                  - name: data
+                    mountPath: /var/lib/postgresql/data
+                resources:
+                  requests:
+                    memory: 256Mi
+                    cpu: 100m
+                  limits:
+                    memory: 1Gi
+                    cpu: 500m
+            volumes:
+              - name: data
+                persistentVolumeClaim:
+                  claimName: postgres-data
+      ---
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: postgres
+        namespace: litellm
+      spec:
+        type: ClusterIP
+        selector:
+          app: postgres
+        ports:
+          - port: 5432
+            targetPort: 5432
+            name: postgres
+  tags: [postgresql, postgresql-deploy]
+
+- name: Apply PostgreSQL deployment
+  ansible.builtin.command: kubectl apply -f /tmp/postgres-deploy.yml
+  changed_when: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  tags: [postgresql, postgresql-deploy]
+
+- name: Print PostgreSQL summary
+  ansible.builtin.debug:
+    msg:
+      - "PostgreSQL: postgres.litellm.svc.cluster.local:5432"
+      - "Database: {{ postgres_db_name }}, User: {{ postgres_user }}"
+      - "Password stored in Vault at secret/postgres (key POSTGRES_PASSWORD) — populate it manually before ESO can sync"
+      - "LiteLLM is not yet wired to this database — DATABASE_URL configuration is a separate follow-up"
+  tags: [postgresql, postgresql-deploy]

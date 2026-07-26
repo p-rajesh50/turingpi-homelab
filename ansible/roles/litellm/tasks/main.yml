@@ -46,6 +46,10 @@
             remoteRef:
               key: secret/llm-keys
               property: LITELLM_MASTER_KEY
+          - secretKey: POSTGRES_PASSWORD
+            remoteRef:
+              key: secret/postgres
+              property: POSTGRES_PASSWORD
 
 - name: Apply llm-api-keys ExternalSecret
   ansible.builtin.command: kubectl apply -f /tmp/litellm-external-secret.yml
@@ -117,6 +121,7 @@
 
           general_settings:
             master_key: os.environ/LITELLM_MASTER_KEY
+            database_url: os.environ/DATABASE_URL
 
 - name: Apply LiteLLM config map
   ansible.builtin.command: kubectl apply -f /tmp/litellm-config.yml
@@ -158,6 +163,14 @@
                 envFrom:
                   - secretRef:
                       name: llm-api-keys
+                env:
+                  - name: POSTGRES_PASSWORD
+                    valueFrom:
+                      secretKeyRef:
+                        name: llm-api-keys
+                        key: POSTGRES_PASSWORD
+                  - name: DATABASE_URL
+                    value: "postgresql://litellm:$(POSTGRES_PASSWORD)@postgres.litellm.svc.cluster.local:5432/litellm"
                 resources:
                   requests:
                     memory: 512Mi

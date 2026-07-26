@@ -1,5 +1,5 @@
 # TuringPi Homelab — Session Handoff Document
-# Date: July 10, 2026 (TrueNAS live, Grafana dashboards fixed — see STATUS below)
+# Date: July 26, 2026 (PostgreSQL live for LiteLLM, Cluster 2 CM4 flashing breakthrough, Longhorn backup NFSv3 fix — see STATUS below)
 # Use this to start a new Claude chat session with full context
 
 ---
@@ -118,9 +118,108 @@ critical/high/warning events, `make cluster-health` passes cleanly.
   session since Portainer already works and wiping its PVC to force
   reinitialization wasn't worth the disruption).
 
-**Next up:** see the revised roadmap in "Follow-Up Items for Future
-Sessions" below — the rest of TrueNAS integration (NFS/SMB shares, Longhorn
-backup target) is next.
+**July 12, 2026 — Storage strategy complete, Cluster 2 BMC static IP, Jetson Orin Nano configured:**
+
+- **Storage strategy — COMPLETE**: TrueNAS datasets created
+  (`SSDStorage/kubernetes`, `SSDStorage/kubernetes/longhorn-backups`,
+  `SSDStorage/kubernetes/cluster-configs`); NFS export configured with hosts
+  restricted to `10.0.0.11-13` (rk1-control/worker-1/worker-2 only), NFS
+  service enabled and running on TrueNAS. Longhorn's backup target is now
+  set to `nfs://10.0.0.5:/mnt/SSDStorage/kubernetes/longhorn-backups`. Vault
+  has recurring Longhorn jobs — `vault-snapshot` + `vault-backup`, both
+  daily at 2 AM, retain 7. New playbooks:
+  `ansible/playbooks/03c-longhorn-backup-target.yml` and
+  `ansible/playbooks/03d-longhorn-recurring-jobs.yml`. New role:
+  `ansible/roles/truenas/`. This closes out the remaining TrueNAS
+  integration work noted as pending in the July 10 entry above and in
+  roadmap item 1 below.
+- **Cluster 2 BMC — DONE**: `tpi2-bmc` now has a static IP, **10.0.0.20**
+  (was `10.0.0.190` DHCP). CM4 node 1 booted at `10.0.0.231` but has an SSH
+  key mismatch — **action needed**: reflash CM4 node 1's SD card with
+  `~/.ssh/turingpi_homelab`, username `raj`, hostname `cm4-node-1`.
+- **Jetson Orin Nano — CONFIGURED**: JetPack 7.2 (L4T 39.2.0) on Ubuntu
+  24.04, installed on a 1TB NVMe. Static IP **10.0.0.50**, hostname
+  `orin-nano`, user `raj` (`ssh raj@10.0.0.50`). MAXN_SUPER power mode
+  active (67 TOPS) and persists across reboots; `jetson_clocks` is pinned at
+  boot via a systemd service. 16GB swap configured on the NVMe. nvpmodel
+  fix: `nvpmodel_p3767_0003_super.conf` must be **copied** (not symlinked)
+  to `/etc/nvpmodel.conf`, or the MAXN_SUPER mode setting doesn't stick.
+- **JetPack 7.2 ecosystem note (important)**: prebuilt Ollama and
+  `dustynv`-container images don't work on this JetPack — CUDA 12.6 (what
+  they're built against) vs CUDA 13.2 (what JetPack 7.2 ships) mismatch.
+  `llama.cpp` must be built from source instead:
+  `cmake -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=87`. Separately, `jtop`
+  reports "JetPack NOT DETECTED" on this JetPack version — confirmed
+  cosmetic only, all metrics (GPU/CPU/power/temp) read correctly despite
+  the message.
+
+**Pending next session:**
+- Orin Nano: build `llama.cpp` from source (CUDA 13.2,
+  `-DCMAKE_CUDA_ARCHITECTURES=87`)
+- Orin Nano: mount the 5TB USB drive at `/mnt/backup-archive`
+- Orin Nano: configure as a TrueNAS rsync target over SSH
+- Orin Nano: install Open WebUI
+- Cluster 1: shutdown → install the Orin NX module in slot 3 → test
+  connectivity (re-tests whether slot 3's fault was hardware or leftover
+  kubeadm/Tailscale artifacts — see roadmap item 2 below)
+- CM4 cluster: reflash node 1's SD card (see SSH key mismatch above), boot
+  the remaining nodes
+
+**Next up:** the Orin Nano / CM4 / slot-3 items above — TrueNAS's storage
+integration (roadmap item 1) is now fully complete.
+
+---
+
+**July 26, 2026 — PostgreSQL deployed for LiteLLM, Cluster 2 CM4 flashing breakthrough, Longhorn backup NFSv3 fix:**
+
+- **PostgreSQL — COMPLETE**: PostgreSQL 16 deployed via new role
+  `ansible/roles/postgresql/`, backed by a 5Gi Longhorn PVC in the `litellm`
+  namespace. `PGDATA` is set to a subdirectory of the mount
+  (`/var/lib/postgresql/data/pgdata`) to work around Longhorn always
+  creating a `lost+found` directory at the volume root, which otherwise
+  makes `initdb` refuse to run on a "non-empty" directory. Daily 2 AM
+  recurring snapshot + backup jobs configured, retain 7 (same pattern as
+  the Vault jobs). LiteLLM's `DATABASE_URL` is wired successfully — Prisma
+  migration confirmed, the full `LiteLLM_*` schema was created in the
+  database. **Still needed**: replace the placeholder
+  `ANTHROPIC_API_KEY`/`GEMINI_API_KEY` values in Vault at `secret/llm-keys`
+  with real keys, then build out LiteLLM teams/budgets for the client
+  FinOps demo ($40/mo standard tier, $200/mo developer tier).
+- **Cluster 2 — CM4 eMMC flashing breakthrough**: found a proven flashing
+  method after prior attempts stalled — use the BMC web portal
+  (`http://10.0.0.20`) → Flash Node → local upload of a **shrunk,
+  pre-configured image** (not a vanilla OS image) → let it run
+  uninterrupted for hours → switch the node to host mode → boot. Node 1
+  (`cm4-node-1`, static `10.0.0.21`) and Node 3 (`cm4-node-3`, static
+  `10.0.0.23`) are confirmed working with this method. Node 2 (a CM5 Lite)
+  was working at `10.0.0.22` but went unreachable after a SATA cable
+  disconnect plus an IPv6 change — needs a power-cycle recovery attempt
+  next session, currently unresolved. Node 4 is not yet flashed; planned
+  static IP `10.0.0.24`. **Gotchas learned**: the BMC portal's CRC-check
+  progress display can look "stuck" near 100% while the flash is actually
+  still succeeding in the background — don't cancel it; the `tpi` BMC CLI
+  can hang or leave orphaned/stopped jobs if `Ctrl+Z` is hit by accident —
+  exit and reconnect SSH rather than fighting the stuck job; a fully
+  unresponsive BMC recovers cleanly from the physical BMC reset button.
+  Node 2 has an mPCIe-to-SATA adapter with a 1TB SATA SSD attached, but the
+  drive never gets detected (AHCI reports "SATA link down") — deferred,
+  needs hands-on cable/power troubleshooting.
+- **Longhorn backup fix**: the backup target URL was silently failing every
+  Vault backup for weeks because TrueNAS has NFSv4 disabled and the
+  original `nfs://` URL was negotiating (and failing) NFSv4. Fixed by
+  forcing NFSv3 via `?nfsOptions=vers%3D3` on the backup target URL (see
+  `ansible/inventory/group_vars/all/vars.yml` `longhorn_backup_target`).
+  **Lesson**: always verify actual backups exist with
+  `kubectl get backups.longhorn.io -n longhorn-system` — the RecurringJob
+  and Volume-label objects existing is not proof that any backup ever
+  actually succeeded.
+
+**Next session priorities:**
+- Recover Cluster 2 node 2 (power cycle, check if still unreachable)
+- Flash Cluster 2 node 4 using the proven eMMC flashing method above
+- Troubleshoot node 2's SATA drive connection (AHCI link-down)
+- Replace the placeholder Anthropic/Gemini API keys in Vault
+- Build LiteLLM teams/budgets for the client FinOps demo
 
 ---
 
@@ -135,6 +234,7 @@ backup target) is next.
 | RK1 | rk1-worker-2 | 10.0.0.13 | 4 | ✅ K3s agent, Ready |
 | Orin NX | orin-nx | 10.0.0.14 | — | ⬜ Removed from board entirely, deferred indefinitely |
 | Jetson Nano | jetson-nano | 10.0.0.15 | — | ⬜ Not yet configured |
+| Jetson Orin Nano | orin-nano | 10.0.0.50 | — | ✅ JetPack 7.2/Ubuntu 24.04 on 1TB NVMe, MAXN_SUPER (67 TOPS), user `raj` |
 
 ### CRITICAL HARDWARE NOTES:
 - **Slot 3 DSA switch port is FAULTY** — nodes in slot 3 cannot communicate
@@ -158,8 +258,12 @@ backup target) is next.
 10.0.0.13         rk1-worker-2 (slot 4)
 10.0.0.14         orin-nx (removed from board, future re-add)
 10.0.0.15         jetson-nano (future)
-10.0.0.20         Cluster 2 BMC (future, CM4 cluster)
-10.0.0.21-24      Cluster 2 CM4 nodes (future)
+10.0.0.20         Cluster 2 BMC (tpi2-bmc) — static, confirmed (was 10.0.0.190 DHCP)
+10.0.0.21-24      Cluster 2 CM4 nodes — node 1 (cm4-node-1) and node 3
+                  (cm4-node-3) confirmed working via eMMC flash; node 2
+                  (CM5 Lite, .22) unreachable pending power-cycle recovery;
+                  node 4 (.24) not yet flashed
+10.0.0.50         orin-nano — static, live, JetPack 7.2/Ubuntu 24.04, user raj
 10.0.0.30         Ingress-NGINX
 10.0.0.35         MinIO
 10.0.0.36         Gitea
@@ -168,7 +272,10 @@ backup target) is next.
 10.0.0.39         Portainer
 10.0.0.40         LiteLLM Gateway
 10.0.0.30-49      MetalLB pool Cluster 1
-10.0.0.50-69      MetalLB pool Cluster 2 (future)
+10.0.0.50-69      MetalLB pool Cluster 2 (future) — ⚠️ CONFLICT: orin-nano (10.0.0.50,
+                  above) now sits at the start of this range. Re-check before
+                  Cluster 2's MetalLB pool is actually provisioned — either move
+                  orin-nano's static IP or shrink/shift the Cluster 2 pool.
 10.0.0.100-199    DHCP pool (router managed)
 ```
 
@@ -516,14 +623,25 @@ http://10.0.0.40/v1   LiteLLM        http://10.0.0.35       MinIO
 
 ### Roadmap (priority order)
 
-1. **TrueNAS Integration** — ✅ static IP (**10.0.0.5**) confirmed and the
-   admin web UI is live at https://truenas.kloud-worx.com via the Cloudflare
-   Tunnel (Google OAuth-protected, Origin Certificate valid until 2041) — see
-   the July 10, 2026 STATUS entry above. Remaining work:
-   - Configure an NFS share on TrueNAS for Longhorn backups.
-   - Set Longhorn's backup target to the TrueNAS NFS share.
-   - Configure scheduled Longhorn volume snapshots.
+1. **TrueNAS Integration** — ✅ **COMPLETE**. Static IP (**10.0.0.5**)
+   confirmed and the admin web UI is live at https://truenas.kloud-worx.com
+   via the Cloudflare Tunnel (Google OAuth-protected, Origin Certificate
+   valid until 2041) — see the July 10, 2026 STATUS entry above. ✅ NFS
+   share configured on TrueNAS for Longhorn backups (hosts restricted to
+   10.0.0.11-13). ✅ Longhorn's backup target set to the TrueNAS NFS share
+   (`nfs://10.0.0.5:/mnt/SSDStorage/kubernetes/longhorn-backups`). ✅
+   Scheduled Longhorn jobs configured — `vault-snapshot` + `vault-backup`,
+   daily 2 AM, retain 7 (Vault volume only for now). See the July 12, 2026
+   STATUS entry above for the full writeup. Still optional/not done:
    - Optional: MinIO tiering to TrueNAS.
+   - Extend recurring snapshot/backup jobs to other volumes beyond Vault, if
+     desired (PostgreSQL now also has its own recurring jobs — see roadmap
+     item 3 update below).
+   - **Fixed July 26, 2026**: the backup target URL was silently failing
+     every backup because TrueNAS has NFSv4 disabled — forced NFSv3 via
+     `?nfsOptions=vers%3D3`. Always confirm with
+     `kubectl get backups.longhorn.io -n longhorn-system`, not just
+     RecurringJob/label existence.
 
 2. **Slot 3 / Orin NX Investigation** — re-test slot 3 with the Orin NX
    installed; the suspected DSA switch-silicon fault may actually have been
@@ -540,8 +658,12 @@ http://10.0.0.40/v1   LiteLLM        http://10.0.0.35       MinIO
    - Models: Gemma 3 12B, Qwen 3 7B/14B, Nvidia Nemotron 8B.
    - Whisper large-v3 for speech-to-text.
    - Wire the LiteLLM gateway to route heavy inference to the Orin NX.
-   - PostgreSQL for the LiteLLM UI (spend tracking, user/team management —
-     currently returns "not connected to DB").
+   - ✅ **PostgreSQL for the LiteLLM UI — COMPLETE (July 26, 2026)**:
+     deployed via `ansible/roles/postgresql/`, `DATABASE_URL` wired,
+     Prisma migration confirmed. LiteLLM UI database features (spend
+     tracking, user/team management) are unblocked. Remaining follow-up:
+     build teams/budgets for the client FinOps demo ($40/mo standard,
+     $200/mo developer).
    - Benchmark inference performance.
 
 4. **Move Observability to Jetson Nano** — Prometheus + Grafana + Loki +
@@ -552,7 +674,8 @@ http://10.0.0.40/v1   LiteLLM        http://10.0.0.35       MinIO
    - Bootstrap K3s on the CM4 cluster.
    - Deploy `ntfy` to replace Gmail alerting.
    - Pi-hole for home DNS.
-   - PostgreSQL for the LiteLLM UI, if not already done on the Orin NX.
+   - ✅ PostgreSQL for the LiteLLM UI is done (Cluster 1, July 26, 2026 —
+     see roadmap item 3 above); no longer needed here.
    - Dev/test sandbox.
 
 6. **RK1 NPU Embeddings Engine** — RKNN toolkit for the RK3588 NPU (6 TOPS
@@ -702,12 +825,21 @@ NFS export path: /mnt/sata/k8s (on rk1-worker-1 at 10.0.0.12)
 
 ---
 
-## Future Cluster 2 (CM4) — Not Started
+## Future Cluster 2 (CM4) — eMMC Flashing In Progress (July 26, 2026)
 
 ```
 cluster2/ansible/ exists in repo with basic structure
-BMC: tpi2-bmc at 10.0.0.20 (not yet configured)
+BMC: tpi2-bmc at 10.0.0.20 — static, confirmed live
 Nodes: cm4-node-1 through cm4-node-4 at 10.0.0.21-24
+  - Node 1 (10.0.0.21): confirmed working via BMC portal flash of a
+    shrunk pre-configured image
+  - Node 2 (10.0.0.22, CM5 Lite): was working, went unreachable after a
+    SATA cable disconnect + IPv6 change — needs power-cycle recovery
+  - Node 3 (10.0.0.23): confirmed working, same method as node 1
+  - Node 4 (10.0.0.24): not yet flashed
+Proven flash method: BMC web portal (http://10.0.0.20) → Flash Node →
+  local upload of a shrunk pre-configured image (NOT vanilla OS) → let
+  it run uninterrupted for hours → switch to host mode → boot
 Plan: Pi-hole (primary 10.0.0.21, secondary 10.0.0.22),
       dev sandbox, databases, GraphQL, CI/CD learning
 ```
@@ -721,7 +853,8 @@ FreeBSD (TrueNAS Core), live at 10.0.0.5 (static, confirmed)
 Admin UI: https://truenas.kloud-worx.com (Cloudflare Tunnel, Google OAuth,
           Origin Certificate valid until 2041)
 Media: SMB + NFS + Jellyfin — not configured yet
-Backup target for Longhorn — not configured yet
+Backup target for Longhorn — ✅ configured (NFSv3 forced, see July 26, 2026
+  STATUS entry — TrueNAS has NFSv4 disabled)
 ```
 
 ---
@@ -754,13 +887,27 @@ Cloudflare Tunnel with Google OAuth). Chunk 4 (Prometheus alerting with Gmail
 SMTP) and Chunk 5 (Grafana dashboards + ServiceMonitors) are both done and
 verified live. TrueNAS is live at 10.0.0.5 (static) and
 https://truenas.kloud-worx.com, and all 8 Grafana dashboards render real data
-— see the July 10, 2026 STATUS entry above. All 3 nodes Ready, all pods
-Running, make cluster-health passes cleanly. Nothing urgent right now.
+— see the July 10, 2026 STATUS entry above. TrueNAS Integration (roadmap item
+1) is now fully complete: NFS export configured, Longhorn backup target set,
+and Vault recurring snapshot/backup jobs scheduled daily — see the July 12,
+2026 STATUS entry above. Cluster 2 BMC now has a static IP (10.0.0.20), and
+the Jetson Orin Nano is configured and reachable at 10.0.0.50 (JetPack 7.2,
+MAXN_SUPER mode). All 3 Cluster 1 nodes Ready, all pods Running, make
+cluster-health passes cleanly. As of July 26, 2026, PostgreSQL 16 is live in
+the litellm namespace and LiteLLM's DATABASE_URL is wired (Prisma schema
+confirmed) — budget/team/spend tracking is unblocked. The Longhorn backup
+target NFSv4→NFSv3 fix is applied and confirmed. Cluster 2 CM4 nodes 1 and 3
+are confirmed flashed and reachable (10.0.0.21/.23); node 2 (10.0.0.22) is
+unreachable pending recovery and node 4 (10.0.0.24) is not yet flashed. Note
+there's still a flagged IP-range conflict between the Orin Nano's static IP
+and the reserved Cluster 2 MetalLB pool, see Network Layout above.
 
-NEXT TASK: finish TrueNAS Integration (roadmap item 1) — static IP and web UI
-access are done; what's left is configuring an NFS share on TrueNAS for
-Longhorn backups, setting Longhorn's backup target, and scheduling volume
-snapshots.
+NEXT TASK: see "Next session priorities" in the July 26, 2026 STATUS entry
+above — recover Cluster 2 node 2, flash node 4, troubleshoot node 2's SATA
+drive, replace placeholder Anthropic/Gemini API keys, and build LiteLLM
+teams/budgets for the client FinOps demo. The Orin Nano follow-ups from the
+July 12, 2026 entry (llama.cpp build, USB mount, TrueNAS rsync target, Open
+WebUI) and the Cluster 1 shutdown/Orin-NX-in-slot-3 test remain open too.
 
 See "Follow-Up Items for Future Sessions" for the full revised roadmap
 (TrueNAS → Slot 3/Orin NX investigation → Orin NX AI inference → move

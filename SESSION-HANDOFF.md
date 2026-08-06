@@ -1,5 +1,5 @@
 # TuringPi Homelab — Session Handoff Document
-# Date: July 26, 2026 (PostgreSQL live for LiteLLM, Cluster 2 CM4 flashing breakthrough, Longhorn backup NFSv3 fix — see STATUS below)
+# Date: July 26, 2026 (PostgreSQL live for LiteLLM, Cluster 2 CM4 flashing breakthrough, Longhorn backup NFSv3 fix, Cluster 2 K3s plan checkpoint — see STATUS below)
 # Use this to start a new Claude chat session with full context
 
 ---
@@ -170,6 +170,54 @@ integration (roadmap item 1) is now fully complete.
 
 ---
 
+**July 26, 2026 (planning) — Cluster 2 K3s bring-up plan (not yet implemented):**
+
+All 4 CM4 nodes (`cm4-node-1` through `cm4-node-4`, 10.0.0.21-24) are now
+confirmed reachable and stable, including surviving a full power-cycle test
+— node 2's earlier SATA-cable/IPv6 issue is resolved. Planned approach
+(reviewed, not yet applied to any files):
+
+- **Isolated roles, not shared**: fork `ansible/roles/k3s-server/` and
+  `ansible/roles/k3s-agent/` into new `k3s-server-cm4`/`k3s-agent-cm4`
+  roles rather than parameterizing the existing ones — Cluster 1's roles
+  stay byte-for-byte untouched. The cm4 copies drop the NVMe
+  symlink/containerd-relocation logic (CM4 has no NVMe), hardcode
+  `cm4-node-1` as the control host (no shared control-host variable), and
+  hardcode `~/.kube/turingpi-cluster2.conf` as the kubeconfig output path.
+- **CNI**: K3s installs with its **default Flannel** backend (no
+  `--flannel-backend=none`, no Cilium) — Cluster 2 doesn't use Cilium.
+- **Topology**: single control-plane (`cm4-node-1`), K3s default SQLite
+  datastore (no HA needed), workers `cm4-node-2`/`cm4-node-3`/`cm4-node-4`.
+- **Longhorn**: scoped to `cm4-node-3` only (its 2×1TB SATA drives) via a
+  `longhorn.io/exclude=true:NoSchedule` taint on the other three nodes —
+  the existing `ansible/roles/longhorn/` role itself stays unmodified,
+  since its DaemonSet pods simply won't tolerate the custom taint.
+- **MetalLB**: new standalone pool `10.0.0.60-10.0.0.69` (shrunk from the
+  previously-reserved `10.0.0.50-10.0.0.69`, which conflicted with the
+  Jetson Orin Nano's static `10.0.0.50` — see the flagged conflict in
+  Network Layout below). No Ingress-NGINX/Prometheus/Headlamp/Portainer
+  on Cluster 2 initially — services get direct LoadBalancer IPs.
+- **New files planned**: `ansible/roles/k3s-server-cm4/`,
+  `ansible/roles/k3s-agent-cm4/`, new `cm4_nodes`/`cm4_control`/
+  `cm4_workers`/`cluster2` groups in `ansible/inventory/hosts.yml`
+  (`ansible_user: raj`, not `ubuntu`), new
+  `ansible/inventory/group_vars/cluster2.yml`, new playbooks
+  `ansible/playbooks/20-cluster2-kubernetes.yml`,
+  `21-cluster2-longhorn.yml`, `22-cluster2-metallb.yml`, and three new
+  Makefile targets (`cluster2-k3s`, `cluster2-longhorn`,
+  `cluster2-metallb`).
+- **Explicitly not touched**: the `cluster2/` directory (per CLAUDE.md —
+  it's a disconnected legacy stub, left as-is), `ansible/roles/k3s-server/`,
+  `ansible/roles/k3s-agent/`, `04-cluster-addons.yml`, `02b-cilium.yml`,
+  and every existing Cluster 1 inventory group.
+
+**Picking this up next session**: implement the plan above (nothing has
+been created yet — this is a plan-only checkpoint), then verify with
+`KUBECONFIG=~/.kube/turingpi-cluster2.conf kubectl get nodes -o wide` and
+confirm Longhorn pods only land on `cm4-node-3`.
+
+---
+
 **July 26, 2026 — PostgreSQL deployed for LiteLLM, Cluster 2 CM4 flashing breakthrough, Longhorn backup NFSv3 fix:**
 
 - **PostgreSQL — COMPLETE**: PostgreSQL 16 deployed via new role
@@ -191,11 +239,14 @@ integration (roadmap item 1) is now fully complete.
   pre-configured image** (not a vanilla OS image) → let it run
   uninterrupted for hours → switch the node to host mode → boot. Node 1
   (`cm4-node-1`, static `10.0.0.21`) and Node 3 (`cm4-node-3`, static
-  `10.0.0.23`) are confirmed working with this method. Node 2 (a CM5 Lite)
-  was working at `10.0.0.22` but went unreachable after a SATA cable
-  disconnect plus an IPv6 change — needs a power-cycle recovery attempt
-  next session, currently unresolved. Node 4 is not yet flashed; planned
-  static IP `10.0.0.24`. **Gotchas learned**: the BMC portal's CRC-check
+  `10.0.0.23`) are confirmed working with this method. **Correction (later
+  the same session)**: all 4 CM4 nodes — `cm4-node-1` through
+  `cm4-node-4` (`10.0.0.21`-`10.0.0.24`) — are now confirmed reachable and
+  stable, including surviving a full power-cycle test; the note below
+  about Node 2 being unreachable and Node 4 not yet flashed is stale.
+  Node 2 (a CM5 Lite) had gone unreachable at `10.0.0.22` after a SATA
+  cable disconnect plus an IPv6 change, but recovered after a power cycle.
+  Node 4 is now flashed at `10.0.0.24`. **Gotchas learned**: the BMC portal's CRC-check
   progress display can look "stuck" near 100% while the flash is actually
   still succeeding in the background — don't cancel it; the `tpi` BMC CLI
   can hang or leave orphaned/stopped jobs if `Ctrl+Z` is hit by accident —
@@ -215,9 +266,13 @@ integration (roadmap item 1) is now fully complete.
   actually succeeded.
 
 **Next session priorities:**
-- Recover Cluster 2 node 2 (power cycle, check if still unreachable)
-- Flash Cluster 2 node 4 using the proven eMMC flashing method above
-- Troubleshoot node 2's SATA drive connection (AHCI link-down)
+- Implement the Cluster 2 K3s bring-up plan above (isolated `-cm4` roles,
+  inventory groups, playbooks 20/21/22, Makefile targets — nothing built
+  yet, plan-only checkpoint)
+- ~~Recover Cluster 2 node 2~~ — resolved, all 4 CM4 nodes confirmed
+  stable through a full power-cycle test
+- Troubleshoot node 2's SATA drive connection (AHCI link-down) if still
+  unresolved
 - Replace the placeholder Anthropic/Gemini API keys in Vault
 - Build LiteLLM teams/budgets for the client FinOps demo
 
@@ -259,10 +314,9 @@ integration (roadmap item 1) is now fully complete.
 10.0.0.14         orin-nx (removed from board, future re-add)
 10.0.0.15         jetson-nano (future)
 10.0.0.20         Cluster 2 BMC (tpi2-bmc) — static, confirmed (was 10.0.0.190 DHCP)
-10.0.0.21-24      Cluster 2 CM4 nodes — node 1 (cm4-node-1) and node 3
-                  (cm4-node-3) confirmed working via eMMC flash; node 2
-                  (CM5 Lite, .22) unreachable pending power-cycle recovery;
-                  node 4 (.24) not yet flashed
+10.0.0.21-24      Cluster 2 CM4 nodes — all 4 (cm4-node-1 through
+                  cm4-node-4) confirmed reachable and stable, including
+                  surviving a full power-cycle test
 10.0.0.50         orin-nano — static, live, JetPack 7.2/Ubuntu 24.04, user raj
 10.0.0.30         Ingress-NGINX
 10.0.0.35         MinIO
@@ -833,10 +887,13 @@ BMC: tpi2-bmc at 10.0.0.20 — static, confirmed live
 Nodes: cm4-node-1 through cm4-node-4 at 10.0.0.21-24
   - Node 1 (10.0.0.21): confirmed working via BMC portal flash of a
     shrunk pre-configured image
-  - Node 2 (10.0.0.22, CM5 Lite): was working, went unreachable after a
-    SATA cable disconnect + IPv6 change — needs power-cycle recovery
+  - Node 2 (10.0.0.22, CM5 Lite): had gone unreachable after a SATA cable
+    disconnect + IPv6 change — recovered after a power cycle, now
+    confirmed stable
   - Node 3 (10.0.0.23): confirmed working, same method as node 1
-  - Node 4 (10.0.0.24): not yet flashed
+  - Node 4 (10.0.0.24): confirmed flashed and reachable
+  - **All 4 nodes confirmed reachable and stable as of July 26, 2026**,
+    including surviving a full power-cycle test
 Proven flash method: BMC web portal (http://10.0.0.20) → Flash Node →
   local upload of a shrunk pre-configured image (NOT vanilla OS) → let
   it run uninterrupted for hours → switch to host mode → boot
@@ -896,15 +953,19 @@ MAXN_SUPER mode). All 3 Cluster 1 nodes Ready, all pods Running, make
 cluster-health passes cleanly. As of July 26, 2026, PostgreSQL 16 is live in
 the litellm namespace and LiteLLM's DATABASE_URL is wired (Prisma schema
 confirmed) — budget/team/spend tracking is unblocked. The Longhorn backup
-target NFSv4→NFSv3 fix is applied and confirmed. Cluster 2 CM4 nodes 1 and 3
-are confirmed flashed and reachable (10.0.0.21/.23); node 2 (10.0.0.22) is
-unreachable pending recovery and node 4 (10.0.0.24) is not yet flashed. Note
-there's still a flagged IP-range conflict between the Orin Nano's static IP
-and the reserved Cluster 2 MetalLB pool, see Network Layout above.
+target NFSv4→NFSv3 fix is applied and confirmed. All 4 Cluster 2 CM4 nodes
+(10.0.0.21-24) are confirmed reachable and stable, including surviving a
+full power-cycle test. A Cluster 2 K3s bring-up plan has been reviewed
+(isolated `-cm4` roles, taint-based Longhorn scoping to cm4-node-3, MetalLB
+pool 10.0.0.60-69) but not yet implemented — see the "Cluster 2 K3s
+bring-up plan" STATUS entry above. Note there's still a flagged IP-range
+conflict between the Orin Nano's static IP and the reserved Cluster 2
+MetalLB pool, see Network Layout above.
 
 NEXT TASK: see "Next session priorities" in the July 26, 2026 STATUS entry
-above — recover Cluster 2 node 2, flash node 4, troubleshoot node 2's SATA
-drive, replace placeholder Anthropic/Gemini API keys, and build LiteLLM
+above — implement the Cluster 2 K3s bring-up plan (all 4 nodes are ready,
+no `--limit` needed), troubleshoot node 2's SATA drive if still
+unresolved, replace placeholder Anthropic/Gemini API keys, and build LiteLLM
 teams/budgets for the client FinOps demo. The Orin Nano follow-ups from the
 July 12, 2026 entry (llama.cpp build, USB mount, TrueNAS rsync target, Open
 WebUI) and the Cluster 1 shutdown/Orin-NX-in-slot-3 test remain open too.

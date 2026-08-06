@@ -1,0 +1,8 @@
+---
+- name: Gitea Actions runner RBAC (research-forum-app)
+  hosts: k8s_control
+  become: false
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  roles:
+    - gitea-runner-rbac

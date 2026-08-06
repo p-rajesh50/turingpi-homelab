@@ -157,6 +157,11 @@ postgresql: vault-check
 	ansible-playbook ansible/playbooks/13-postgresql.yml \
 		-i $(INVENTORY) --tags postgresql $(ANSIBLE_ARGS)
 
+.PHONY: gitea-runner-rbac
+gitea-runner-rbac:
+	ansible-playbook ansible/playbooks/14-gitea-runner-rbac.yml \
+		-i $(INVENTORY) --tags gitea-runner-rbac $(ANSIBLE_ARGS)
+
 .PHONY: addons
 addons:
 	ansible-playbook ansible/playbooks/04-cluster-addons.yml \

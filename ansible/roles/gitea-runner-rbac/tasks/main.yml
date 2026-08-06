@@ -1,0 +1,175 @@
+---
+# Namespace-scoped RBAC for the Gitea Actions runner to deploy into
+# research-forum-app only (not cluster-admin). Generates a durable
+# kubeconfig (long-lived ServiceAccount token, not a short-lived
+# TokenRequest token) for pasting into Gitea's Actions secrets.
+
+- name: Create research-forum-app namespace
+  ansible.builtin.shell: kubectl create namespace research-forum-app --dry-run=client -o yaml | kubectl apply -f -
+  args:
+    executable: /bin/bash
+  changed_when: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  tags: [gitea-runner-rbac]
+
+- name: Deploy ServiceAccount, Role, RoleBinding, and token Secret
+  ansible.builtin.copy:
+    dest: /tmp/gitea-runner-rbac.yml
+    mode: "0644"
+    content: |
+      ---
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: gitea-runner-deployer
+        namespace: research-forum-app
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: Role
+      metadata:
+        name: gitea-runner-deployer
+        namespace: research-forum-app
+      rules:
+        - apiGroups: [""]
+          resources: ["services", "persistentvolumeclaims", "secrets", "configmaps"]
+          verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+        - apiGroups: ["apps"]
+          resources: ["deployments"]
+          verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+        - apiGroups: ["networking.k8s.io"]
+          resources: ["ingresses"]
+          verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+        - apiGroups: [""]
+          resources: ["pods"]
+          verbs: ["get", "list", "watch"]
+        - apiGroups: ["batch"]
+          resources: ["jobs"]
+          verbs: ["get", "list", "watch", "create", "delete"]
+        - apiGroups: [""]
+          resources: ["pods/log"]
+          verbs: ["get"]
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: gitea-runner-deployer
+        namespace: research-forum-app
+      subjects:
+        - kind: ServiceAccount
+          name: gitea-runner-deployer
+          namespace: research-forum-app
+      roleRef:
+        kind: Role
+        name: gitea-runner-deployer
+        apiGroup: rbac.authorization.k8s.io
+      ---
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: gitea-runner-deployer-token
+        namespace: research-forum-app
+        annotations:
+          kubernetes.io/service-account.name: gitea-runner-deployer
+      type: kubernetes.io/service-account-token
+  tags: [gitea-runner-rbac]
+
+- name: Apply ServiceAccount, Role, RoleBinding, and token Secret
+  ansible.builtin.command: kubectl apply -f /tmp/gitea-runner-rbac.yml
+  changed_when: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  tags: [gitea-runner-rbac]
+
+- name: Wait for the ServiceAccount token to populate
+  ansible.builtin.command: >
+    kubectl get secret gitea-runner-deployer-token -n research-forum-app
+    -o jsonpath='{.data.token}'
+  register: sa_token_check
+  until: sa_token_check.stdout | length > 0
+  retries: 15
+  delay: 2
+  changed_when: false
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  tags: [gitea-runner-rbac]
+
+- name: Read the ServiceAccount token
+  ansible.builtin.command: >
+    kubectl get secret gitea-runner-deployer-token -n research-forum-app
+    -o jsonpath='{.data.token}'
+  register: sa_token_b64
+  changed_when: false
+  no_log: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  tags: [gitea-runner-rbac]
+
+- name: Read the cluster CA certificate
+  ansible.builtin.command: >
+    kubectl get secret gitea-runner-deployer-token -n research-forum-app
+    -o jsonpath="{.data['ca\.crt']}"
+  register: sa_ca_b64
+  changed_when: false
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  tags: [gitea-runner-rbac]
+
+- name: Decode the ServiceAccount token
+  ansible.builtin.set_fact:
+    sa_token: "{{ sa_token_b64.stdout | b64decode }}"
+  no_log: true
+  tags: [gitea-runner-rbac]
+
+- name: Write scoped kubeconfig to workstation
+  ansible.builtin.copy:
+    dest: "{{ lookup('env', 'HOME') }}/.kube/turingpi-cluster1-research-forum-app.conf"
+    mode: "0600"
+    content: |
+      apiVersion: v1
+      kind: Config
+      current-context: gitea-runner-deployer
+      clusters:
+        - name: turingpi-cluster1
+          cluster:
+            server: https://{{ k3s_server_ip }}:6443
+            certificate-authority-data: {{ sa_ca_b64.stdout }}
+      users:
+        - name: gitea-runner-deployer
+          user:
+            token: {{ sa_token }}
+      contexts:
+        - name: gitea-runner-deployer
+          context:
+            cluster: turingpi-cluster1
+            namespace: research-forum-app
+            user: gitea-runner-deployer
+  delegate_to: localhost
+  become: false
+  no_log: true
+  tags: [gitea-runner-rbac]
+
+- name: Print the kubeconfig for pasting into Gitea Actions secrets
+  ansible.builtin.debug:
+    msg:
+      - "=== Paste the following into Gitea Actions secrets (e.g. KUBE_CONFIG) ==="
+      - "apiVersion: v1"
+      - "kind: Config"
+      - "current-context: gitea-runner-deployer"
+      - "clusters:"
+      - "  - name: turingpi-cluster1"
+      - "    cluster:"
+      - "      server: https://{{ k3s_server_ip }}:6443"
+      - "      certificate-authority-data: {{ sa_ca_b64.stdout }}"
+      - "users:"
+      - "  - name: gitea-runner-deployer"
+      - "    user:"
+      - "      token: {{ sa_token }}"
+      - "contexts:"
+      - "  - name: gitea-runner-deployer"
+      - "    context:"
+      - "      cluster: turingpi-cluster1"
+      - "      namespace: research-forum-app"
+      - "      user: gitea-runner-deployer"
+      - "=== Also saved to ~/.kube/turingpi-cluster1-research-forum-app.conf on the workstation ==="
+  tags: [gitea-runner-rbac]

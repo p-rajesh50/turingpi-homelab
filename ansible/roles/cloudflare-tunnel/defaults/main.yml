@@ -27,9 +27,10 @@ cloudflare_tunnel_hostnames:
 
 # Hostnames protected by Cloudflare Access. jupyter.kloud-worx.com and
 # llm.kloud-worx.com are intentionally left out of this list.
-# research-forum.kloud-worx.com is intentionally left out too — it has its
-# own independent two-email Access Application/Policy provisioned by
-# research-forum-access.yml, not the shared single-email loop below.
+# research-forum.kloud-worx.com and gitea.kloud-worx.com are intentionally
+# left out too — each has its own independent Access Application/Policy
+# provisioned by research-forum-access.yml / gitea-access.yml, not the
+# shared single-email loop below.
 cloudflare_access_hostnames:
   - grafana.kloud-worx.com
   - headlamp.kloud-worx.com
@@ -37,7 +38,6 @@ cloudflare_access_hostnames:
   - minio.kloud-worx.com
   - litellm.kloud-worx.com
   - vault.kloud-worx.com
-  - gitea.kloud-worx.com
   - prefect.kloud-worx.com
   - truenas.kloud-worx.com
 
@@ -45,5 +45,12 @@ cloudflare_access_hostnames:
 # instead of the single shared cloudflare_access_allowed_email above.
 cloudflare_research_forum_hostname: "research-forum.kloud-worx.com"
 cloudflare_research_forum_allowed_emails:
+  - "rajesh.pamulapati@gmail.com"
+  - "pamulliving@gmail.com"
+
+# Gitea — separate Access policy, two allowed identities instead of the
+# single shared cloudflare_access_allowed_email above.
+cloudflare_gitea_hostname: "gitea.kloud-worx.com"
+cloudflare_gitea_allowed_emails:
   - "rajesh.pamulapati@gmail.com"
   - "pamulliving@gmail.com"

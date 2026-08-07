@@ -406,6 +406,10 @@
   ansible.builtin.include_tasks: research-forum-access.yml
   tags: [access]
 
+- name: Provision Cloudflare Access application + policy for Gitea
+  ansible.builtin.include_tasks: gitea-access.yml
+  tags: [access]
+
 - name: Print Cloudflare Access summary
   ansible.builtin.debug:
     msg:
@@ -415,4 +419,6 @@
       - "Session duration: {{ cloudflare_access_session_duration }}"
       - "Separately, {{ cloudflare_research_forum_hostname }} is protected by its own Access policy"
       - "Allowed identities: {{ cloudflare_research_forum_allowed_emails }} via {{ cloudflare_access_idp_name }}"
+      - "Separately, {{ cloudflare_gitea_hostname }} is protected by its own Access policy"
+      - "Allowed identities: {{ cloudflare_gitea_allowed_emails }} via {{ cloudflare_access_idp_name }}"
   tags: [access]

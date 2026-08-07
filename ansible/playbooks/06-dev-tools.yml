@@ -4,6 +4,60 @@
 #   - Gitea (self-hosted Git)
 #   - Gitea Actions runner (CI/CD)
 
+# Gitea's registry (LoadBalancer service.http, no TLS termination) is plain
+# HTTP-only, but containerd defaults to HTTPS for any registry host it has no
+# explicit exception for. Image pulls happen at the kubelet/containerd layer
+# on each node, so every node needs this exception, not just the control
+# plane -- and the registries.yaml is only read by containerd at startup, so
+# the k3s (or k3s-agent) service must be restarted to pick it up. Restarting
+# k3s does not kill running containers -- their containerd-shim processes
+# stay attached independently, as documented by upstream k3s/containerd.
+- name: Configure containerd to treat the Gitea registry as plain HTTP
+  hosts: k8s_cluster
+  become: true
+  tasks:
+    - name: Ensure /etc/rancher/k3s exists
+      ansible.builtin.file:
+        path: /etc/rancher/k3s
+        state: directory
+        mode: "0755"
+
+    - name: Write k3s registries.yaml for the in-cluster Gitea registry
+      ansible.builtin.copy:
+        dest: /etc/rancher/k3s/registries.yaml
+        mode: "0644"
+        content: |
+          mirrors:
+            "{{ gitea_service_ip }}:3000":
+              endpoint:
+                - "http://{{ gitea_service_ip }}:3000"
+      register: gitea_registries_conf
+
+    - name: Restart k3s server (control-plane node)
+      ansible.builtin.systemd:
+        name: k3s
+        state: restarted
+      when: k8s_role == 'control-plane' and gitea_registries_conf.changed
+
+    - name: Restart k3s-agent (worker nodes)
+      ansible.builtin.systemd:
+        name: k3s-agent
+        state: restarted
+      when: k8s_role == 'worker' and gitea_registries_conf.changed
+
+    - name: Wait for node to report Ready again
+      ansible.builtin.command: kubectl get node {{ inventory_hostname }} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+      register: node_ready_check
+      until: node_ready_check.stdout == "True"
+      retries: 20
+      delay: 3
+      changed_when: false
+      become: false
+      delegate_to: rk1-control
+      environment:
+        KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+      when: gitea_registries_conf.changed
+
 - name: Deploy developer tools
   hosts: k8s_control
   become: false

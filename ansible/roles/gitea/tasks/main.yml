@@ -131,6 +131,30 @@
   environment:
     KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
 
+- name: Read gitea-admin-credentials for registry pull secret
+  ansible.builtin.command: >
+    kubectl get secret gitea-admin-credentials -n gitea
+    -o jsonpath='{.data.username}{"\n"}{.data.password}'
+  register: gitea_admin_creds_b64
+  changed_when: false
+  no_log: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+- name: Create imagePullSecret for the in-cluster Gitea registry
+  ansible.builtin.shell: >
+    kubectl create secret docker-registry gitea-registry-pull-secret -n gitea
+    --docker-server=10.0.0.36:3000
+    --docker-username={{ (gitea_admin_creds_b64.stdout_lines[0] | b64decode) }}
+    --docker-password={{ (gitea_admin_creds_b64.stdout_lines[1] | b64decode) }}
+    --dry-run=client -o yaml | kubectl apply -f -
+  args:
+    executable: /bin/bash
+  changed_when: true
+  no_log: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
 - name: Deploy Gitea Actions runner
   ansible.builtin.copy:
     dest: /tmp/gitea-runner-deploy.yml
@@ -152,9 +176,11 @@
             labels:
               app: gitea-act-runner
           spec:
+            imagePullSecrets:
+              - name: gitea-registry-pull-secret
             containers:
               - name: act-runner
-                image: gitea/act_runner:latest
+                image: 10.0.0.36:3000/gitea_admin/gitea-act-runner-kubectl:v1.30.5
                 env:
                   - name: GITEA_INSTANCE_URL
                     value: "http://gitea-http.gitea.svc.cluster.local:3000"
@@ -185,5 +211,5 @@
       - "Gitea: http://{{ gitea_service_ip }}:3000"
       - "Admin user: gitea-admin (password/email in Vault at secret/gitea)"
       - "Database: SQLite (single file on the Longhorn PVC)"
-      - "Actions runner: 2 replicas, host-mode execution (no Docker socket)"
+      - "Actions runner: 2 replicas, host-mode execution (no Docker socket), custom image with kubectl baked in"
       - "CI workflows must use: runs-on: host — plain run: steps only, no uses: docker://... actions"

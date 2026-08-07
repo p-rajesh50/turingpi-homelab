@@ -1,0 +1,3 @@
+FROM gitea/act_runner:latest
+RUN wget -O /usr/local/bin/kubectl "https://dl.k8s.io/release/v1.30.5/bin/linux/arm64/kubectl" && \
+    chmod +x /usr/local/bin/kubectl

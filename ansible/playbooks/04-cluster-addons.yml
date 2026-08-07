@@ -64,6 +64,7 @@
         --set controller.metrics.enabled=true
         --set controller.metrics.serviceMonitor.enabled=true
         --set controller.metrics.serviceMonitor.additionalLabels.release=monitoring
+        --set controller.config.use-forwarded-headers="true"
         --wait --timeout 10m
       changed_when: true
 

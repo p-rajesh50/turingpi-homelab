@@ -102,6 +102,10 @@
               originRequest:
                 noTLSVerify: true
 
+            # Research Forum App — routes through its own Ingress resource
+            - hostname: research-forum.kloud-worx.com
+              service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
+
             # Catch-all
             - service: http_status:404
 
@@ -178,7 +182,9 @@
       - "  https://prefect.kloud-worx.com    ← Prefect UI"
       - "  https://headlamp.kloud-worx.com   ← Headlamp K8s UI"
       - "  https://portainer.kloud-worx.com  ← Portainer multi-cluster UI"
+      - "  https://research-forum.kloud-worx.com ← Research Forum App"
       - "All protected by Cloudflare Access (Google OAuth login required)"
+      - "research-forum.kloud-worx.com has its own separate two-email Access policy — not the shared single-email policy above"
   tags: [tunnel]
 
 # --- Cloudflare API credentials (shared by DNS + Access sections below) ---
@@ -396,6 +402,10 @@
     loop_var: cf_hostname
   tags: [access]
 
+- name: Provision Cloudflare Access application + policy for Research Forum App
+  ansible.builtin.include_tasks: research-forum-access.yml
+  tags: [access]
+
 - name: Print Cloudflare Access summary
   ansible.builtin.debug:
     msg:
@@ -403,4 +413,6 @@
       - "{{ cloudflare_access_hostnames }}"
       - "Allowed identity: {{ cloudflare_access_allowed_email }} via {{ cloudflare_access_idp_name }}"
       - "Session duration: {{ cloudflare_access_session_duration }}"
+      - "Separately, {{ cloudflare_research_forum_hostname }} is protected by its own Access policy"
+      - "Allowed identities: {{ cloudflare_research_forum_allowed_emails }} via {{ cloudflare_access_idp_name }}"
   tags: [access]

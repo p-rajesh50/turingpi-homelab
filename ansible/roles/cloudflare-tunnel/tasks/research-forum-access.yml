@@ -1,0 +1,71 @@
+---
+# ansible/roles/cloudflare-tunnel/tasks/research-forum-access.yml
+# Included once (not looped) by main.yml, after the shared cloudflare_access_hostnames
+# loop. Provisions a single, independently-scoped Access Application + Policy for
+# cloudflare_research_forum_hostname, allowing BOTH emails in
+# cloudflare_research_forum_allowed_emails — separate from cloudflare_access_allowed_email
+# and cloudflare_access_hostnames, which this file never reads or writes.
+# Expects cf_api_token, cf_account_id, cf_google_idp_id and cf_all_apps to already
+# be set by the including main.yml.
+
+- name: "Check for existing Access Application ({{ cloudflare_research_forum_hostname }})"
+  ansible.builtin.set_fact:
+    cf_research_forum_existing_app: "{{ cf_all_apps.json.result | selectattr('domain', 'equalto', cloudflare_research_forum_hostname) | list }}"
+
+- name: "Create Access Application ({{ cloudflare_research_forum_hostname }})"
+  ansible.builtin.uri:
+    url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/access/apps"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ cf_api_token }}"
+      Content-Type: application/json
+    body_format: json
+    body:
+      name: "{{ cloudflare_research_forum_hostname }}"
+      domain: "{{ cloudflare_research_forum_hostname }}"
+      type: self_hosted
+      session_duration: "{{ cloudflare_access_session_duration }}"
+      allowed_idps:
+        - "{{ cf_google_idp_id }}"
+    status_code: [200, 201]
+  register: cf_research_forum_created_app
+  when: cf_research_forum_existing_app | length == 0
+  no_log: true
+
+- name: "Resolve Access Application ID ({{ cloudflare_research_forum_hostname }})"
+  ansible.builtin.set_fact:
+    cf_research_forum_app_id: "{{ cf_research_forum_existing_app[0].id if (cf_research_forum_existing_app | length > 0) else cf_research_forum_created_app.json.result.id }}"
+
+- name: "Check for existing Access Policy ({{ cloudflare_research_forum_hostname }})"
+  ansible.builtin.uri:
+    url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/access/apps/{{ cf_research_forum_app_id }}/policies"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ cf_api_token }}"
+    status_code: [200]
+  register: cf_research_forum_existing_policies
+  no_log: true
+
+- name: "Create Access Policy ({{ cloudflare_research_forum_hostname }})"
+  ansible.builtin.uri:
+    url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/access/apps/{{ cf_research_forum_app_id }}/policies"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ cf_api_token }}"
+      Content-Type: application/json
+    body_format: json
+    body:
+      name: "Allow Research Forum App team"
+      decision: allow
+      include:
+        - email:
+            email: "{{ cloudflare_research_forum_allowed_emails[0] }}"
+        - email:
+            email: "{{ cloudflare_research_forum_allowed_emails[1] }}"
+      session_duration: "{{ cloudflare_access_session_duration }}"
+    status_code: [200, 201]
+  when: >-
+    cf_research_forum_existing_policies.json.result
+    | selectattr('name', 'equalto', 'Allow Research Forum App team')
+    | list | length == 0
+  no_log: true

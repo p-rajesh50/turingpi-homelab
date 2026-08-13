@@ -46,6 +46,43 @@
   register: cf_research_forum_existing_policies
   no_log: true
 
+- name: "Build Access Policy include list ({{ cloudflare_research_forum_hostname }})"
+  ansible.builtin.set_fact:
+    cf_research_forum_include: "{{ cf_research_forum_include | default([]) + [{'email': {'email': item}}] }}"
+  loop: "{{ cloudflare_research_forum_allowed_emails }}"
+
+- name: "Resolve target Research Forum App Access Policy"
+  ansible.builtin.set_fact:
+    cf_research_forum_target_policy: "{{ cf_research_forum_existing_policies.json.result | selectattr('name', 'equalto', 'Allow Research Forum App team') | list }}"
+
+- name: "Check whether target policy's emails already match"
+  ansible.builtin.set_fact:
+    cf_research_forum_emails_match: >-
+      {{
+        (cf_research_forum_target_policy[0].include | default([]) | map(attribute='email.email') | list | sort)
+        == (cloudflare_research_forum_allowed_emails | sort)
+        if (cf_research_forum_target_policy | length > 0) else false
+      }}
+
+- name: "Update Research Forum App Access Policy in place ({{ cloudflare_research_forum_hostname }})"
+  ansible.builtin.uri:
+    url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/access/apps/{{ cf_research_forum_app_id }}/policies/{{ cf_research_forum_target_policy[0].id }}"
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ cf_api_token }}"
+      Content-Type: application/json
+    body_format: json
+    body:
+      name: "Allow Research Forum App team"
+      decision: allow
+      include: "{{ cf_research_forum_include }}"
+      session_duration: "{{ cloudflare_access_session_duration }}"
+    status_code: [200]
+  when:
+    - cf_research_forum_target_policy | length > 0
+    - not cf_research_forum_emails_match
+  no_log: true
+
 - name: "Create Access Policy ({{ cloudflare_research_forum_hostname }})"
   ansible.builtin.uri:
     url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/access/apps/{{ cf_research_forum_app_id }}/policies"
@@ -57,15 +94,8 @@
     body:
       name: "Allow Research Forum App team"
       decision: allow
-      include:
-        - email:
-            email: "{{ cloudflare_research_forum_allowed_emails[0] }}"
-        - email:
-            email: "{{ cloudflare_research_forum_allowed_emails[1] }}"
+      include: "{{ cf_research_forum_include }}"
       session_duration: "{{ cloudflare_access_session_duration }}"
     status_code: [200, 201]
-  when: >-
-    cf_research_forum_existing_policies.json.result
-    | selectattr('name', 'equalto', 'Allow Research Forum App team')
-    | list | length == 0
+  when: cf_research_forum_target_policy | length == 0
   no_log: true

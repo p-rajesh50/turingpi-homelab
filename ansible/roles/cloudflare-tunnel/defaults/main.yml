@@ -47,6 +47,9 @@ cloudflare_research_forum_hostname: "research-forum.kloud-worx.com"
 cloudflare_research_forum_allowed_emails:
   - "rajesh.pamulapati@gmail.com"
   - "pamulliving@gmail.com"
+  - "kdougl1@uic.edu"
+  - "nkstout@uic.edu"
+  - "sydelleb@uic.edu"
 
 # Gitea — separate Access policy, two allowed identities instead of the
 # single shared cloudflare_access_allowed_email above.

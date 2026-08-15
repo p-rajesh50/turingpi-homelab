@@ -276,6 +276,62 @@ confirm Longhorn pods only land on `cm4-node-3`.
 - Replace the placeholder Anthropic/Gemini API keys in Vault
 - Build LiteLLM teams/budgets for the client FinOps demo
 
+**August 12-13, 2026 — Gitea CI Kaniko RBAC, custom act-runner image with kubectl, research-forum.kloud-worx.com onboarded, per-app Cloudflare Access policies:**
+
+- **Gitea Actions runner RBAC extended for Kaniko builds**: `gitea-runner-rbac`
+  Role gained `batch/jobs` (full CRUD) and `pods/log` (read-only) so CI
+  pipelines in the separate `research-forum-app` repo can run in-cluster
+  Kaniko build Jobs and stream their logs, scoped only to that Role — no
+  other namespace or permission touched.
+- **Custom `gitea-act-runner` image with `kubectl` baked in**: the runner's
+  job-step shell turned out to have no `curl`/`wget`/package manager/kubectl
+  at all, blocking `deploy.yml`. Built `ansible/roles/gitea/files/Dockerfile.act-runner-kubectl`
+  (Alpine 3.23.4 base, confirmed via `docker run --rm --entrypoint cat
+  gitea/act_runner:latest /etc/os-release`) that adds `kubectl` v1.30.5 via
+  `wget` (already present in the base image). Built and pushed from
+  parani-laptop's Docker Desktop to the Gitea registry at LAN address
+  `10.0.0.36:3000` (outside-cluster push address), while the in-cluster
+  Deployment pulls the same image via that same LAN IP — image-pull happens
+  at the kubelet/containerd layer, which resolves via the node's host DNS,
+  not CoreDNS, so `*.svc.cluster.local` names are unusable there. Hit and
+  fixed three layered `ImagePullBackOff` causes in sequence: DNS resolution
+  (switched to LAN IP), `imagePullSecrets` `--docker-server` mismatch (had
+  to match the image ref's host:port exactly), and HTTP-vs-HTTPS (containerd
+  defaults to HTTPS for unknown registries; Gitea serves plain HTTP — fixed
+  via `/etc/rancher/k3s/registries.yaml` mirror config on all 3 nodes,
+  `ansible/playbooks/06-dev-tools.yml`, requiring a `k3s`/`k3s-agent`
+  service restart to reload since registries.yaml is only read at
+  containerd startup). Verified both runner replicas `Running` with a
+  working `kubectl exec ... -- kubectl version --client`.
+- **`research-forum.kloud-worx.com` added to the Cloudflare Tunnel**, with
+  its own independent Access Application + Policy ("Allow Research Forum
+  App team") separate from the shared single-email
+  `cloudflare_access_allowed_email` path used by the other 8 tools — new
+  `ansible/roles/cloudflare-tunnel/tasks/research-forum-access.yml`.
+- **`gitea.kloud-worx.com` split off the shared Access policy into its own**,
+  matching the research-forum pattern (`gitea-access.yml`), so
+  `pamulliving@gmail.com` could be granted access to Gitea only, without
+  touching the other 8 shared-policy tools. Because gitea's Access
+  Application + single-email Policy already existed from prior shared-loop
+  runs, this updates the existing Policy **in place** (`PUT`, full-object
+  replace preserving `decision`/`session_duration`) rather than creating a
+  duplicate — verified live via the Cloudflare API that `created_at` stayed
+  the same while `updated_at` changed, confirming a true in-place update.
+- **Three more emails added to the research-forum Access policy**
+  (`kdougl1@uic.edu`, `nkstout@uic.edu`, `sydelleb@uic.edu`, alongside the
+  original two), and `research-forum-access.yml` was extended with the same
+  idempotent PUT-if-emails-differ logic gitea-access.yml already had — it
+  previously only handled first-time creation and would have silently done
+  nothing on a re-run with new emails. Verified live: same policy `id`/
+  `created_at`, `include` now has all 5 emails.
+- **Mixed-content fix on `research-forum.kloud-worx.com`**: Ingress-NGINX
+  wasn't honoring `X-Forwarded-Proto` from cloudflared (which connects
+  internally over plain HTTP), so it recomputed the scheme itself and
+  overwrote `https` with `http` before the app saw it. Fixed with one Helm
+  flag, `--set controller.config.use-forwarded-headers="true"`, added to
+  the "Install Ingress-NGINX" task in `ansible/playbooks/04-cluster-addons.yml`
+  and applied live (confirmed via `kubectl get configmap`).
+
 ---
 
 ## Hardware — Cluster 1 (TuringPi 2.5)

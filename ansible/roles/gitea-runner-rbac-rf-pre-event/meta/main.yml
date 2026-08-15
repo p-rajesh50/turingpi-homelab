@@ -1,0 +1,4 @@
+---
+galaxy_info:
+  role_name: gitea_runner_rbac_rf_pre_event
+dependencies: []

@@ -24,6 +24,7 @@ cloudflare_tunnel_hostnames:
   - portainer.kloud-worx.com
   - truenas.kloud-worx.com
   - research-forum.kloud-worx.com
+  - rf-pre-event.kloud-worx.com
 
 # Hostnames protected by Cloudflare Access. jupyter.kloud-worx.com and
 # llm.kloud-worx.com are intentionally left out of this list.
@@ -57,3 +58,13 @@ cloudflare_gitea_hostname: "gitea.kloud-worx.com"
 cloudflare_gitea_allowed_emails:
   - "rajesh.pamulapati@gmail.com"
   - "pamulliving@gmail.com"
+
+# RF Pre-Event App — separate Access policy, five allowed identities,
+# independent from cloudflare_access_allowed_email above.
+cloudflare_rf_pre_event_hostname: "rf-pre-event.kloud-worx.com"
+cloudflare_rf_pre_event_allowed_emails:
+  - "rajesh.pamulapati@gmail.com"
+  - "pamulliving@gmail.com"
+  - "kdougl1@uic.edu"
+  - "nkstout@uic.edu"
+  - "sydelleb@uic.edu"

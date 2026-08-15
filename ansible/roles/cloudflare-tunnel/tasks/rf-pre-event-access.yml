@@ -1,0 +1,103 @@
+---
+# ansible/roles/cloudflare-tunnel/tasks/rf-pre-event-access.yml
+# Included once (not looped) by main.yml, after the Research Forum App task.
+# Provisions a single, independently-scoped Access Application + Policy for
+# cloudflare_rf_pre_event_hostname, allowing all emails in
+# cloudflare_rf_pre_event_allowed_emails — separate from
+# cloudflare_access_allowed_email, cloudflare_access_hostnames, and the
+# research-forum-app / gitea Access resources, which this file never reads
+# or writes.
+# Expects cf_api_token, cf_account_id, cf_google_idp_id and cf_all_apps to already
+# be set by the including main.yml.
+
+- name: "Check for existing Access Application ({{ cloudflare_rf_pre_event_hostname }})"
+  ansible.builtin.set_fact:
+    cf_rf_pre_event_existing_app: "{{ cf_all_apps.json.result | selectattr('domain', 'equalto', cloudflare_rf_pre_event_hostname) | list }}"
+
+- name: "Create Access Application ({{ cloudflare_rf_pre_event_hostname }})"
+  ansible.builtin.uri:
+    url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/access/apps"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ cf_api_token }}"
+      Content-Type: application/json
+    body_format: json
+    body:
+      name: "{{ cloudflare_rf_pre_event_hostname }}"
+      domain: "{{ cloudflare_rf_pre_event_hostname }}"
+      type: self_hosted
+      session_duration: "{{ cloudflare_access_session_duration }}"
+      allowed_idps:
+        - "{{ cf_google_idp_id }}"
+    status_code: [200, 201]
+  register: cf_rf_pre_event_created_app
+  when: cf_rf_pre_event_existing_app | length == 0
+  no_log: true
+
+- name: "Resolve Access Application ID ({{ cloudflare_rf_pre_event_hostname }})"
+  ansible.builtin.set_fact:
+    cf_rf_pre_event_app_id: "{{ cf_rf_pre_event_existing_app[0].id if (cf_rf_pre_event_existing_app | length > 0) else cf_rf_pre_event_created_app.json.result.id }}"
+
+- name: "Check for existing Access Policy ({{ cloudflare_rf_pre_event_hostname }})"
+  ansible.builtin.uri:
+    url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/access/apps/{{ cf_rf_pre_event_app_id }}/policies"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ cf_api_token }}"
+    status_code: [200]
+  register: cf_rf_pre_event_existing_policies
+  no_log: true
+
+- name: "Build Access Policy include list ({{ cloudflare_rf_pre_event_hostname }})"
+  ansible.builtin.set_fact:
+    cf_rf_pre_event_include: "{{ cf_rf_pre_event_include | default([]) + [{'email': {'email': item}}] }}"
+  loop: "{{ cloudflare_rf_pre_event_allowed_emails }}"
+
+- name: "Resolve target RF Pre-Event App Access Policy"
+  ansible.builtin.set_fact:
+    cf_rf_pre_event_target_policy: "{{ cf_rf_pre_event_existing_policies.json.result | selectattr('name', 'equalto', 'Allow RF Pre-Event App team') | list }}"
+
+- name: "Check whether target policy's emails already match"
+  ansible.builtin.set_fact:
+    cf_rf_pre_event_emails_match: >-
+      {{
+        (cf_rf_pre_event_target_policy[0].include | default([]) | map(attribute='email.email') | list | sort)
+        == (cloudflare_rf_pre_event_allowed_emails | sort)
+        if (cf_rf_pre_event_target_policy | length > 0) else false
+      }}
+
+- name: "Update RF Pre-Event App Access Policy in place ({{ cloudflare_rf_pre_event_hostname }})"
+  ansible.builtin.uri:
+    url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/access/apps/{{ cf_rf_pre_event_app_id }}/policies/{{ cf_rf_pre_event_target_policy[0].id }}"
+    method: PUT
+    headers:
+      Authorization: "Bearer {{ cf_api_token }}"
+      Content-Type: application/json
+    body_format: json
+    body:
+      name: "Allow RF Pre-Event App team"
+      decision: allow
+      include: "{{ cf_rf_pre_event_include }}"
+      session_duration: "{{ cloudflare_access_session_duration }}"
+    status_code: [200]
+  when:
+    - cf_rf_pre_event_target_policy | length > 0
+    - not cf_rf_pre_event_emails_match
+  no_log: true
+
+- name: "Create Access Policy ({{ cloudflare_rf_pre_event_hostname }})"
+  ansible.builtin.uri:
+    url: "https://api.cloudflare.com/client/v4/accounts/{{ cf_account_id }}/access/apps/{{ cf_rf_pre_event_app_id }}/policies"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ cf_api_token }}"
+      Content-Type: application/json
+    body_format: json
+    body:
+      name: "Allow RF Pre-Event App team"
+      decision: allow
+      include: "{{ cf_rf_pre_event_include }}"
+      session_duration: "{{ cloudflare_access_session_duration }}"
+    status_code: [200, 201]
+  when: cf_rf_pre_event_target_policy | length == 0
+  no_log: true

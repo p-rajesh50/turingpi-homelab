@@ -106,6 +106,10 @@
             - hostname: research-forum.kloud-worx.com
               service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
 
+            # RF Pre-Event App — routes through its own Ingress resource
+            - hostname: rf-pre-event.kloud-worx.com
+              service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
+
             # Catch-all
             - service: http_status:404
 
@@ -183,8 +187,9 @@
       - "  https://headlamp.kloud-worx.com   ← Headlamp K8s UI"
       - "  https://portainer.kloud-worx.com  ← Portainer multi-cluster UI"
       - "  https://research-forum.kloud-worx.com ← Research Forum App"
+      - "  https://rf-pre-event.kloud-worx.com ← RF Pre-Event App"
       - "All protected by Cloudflare Access (Google OAuth login required)"
-      - "research-forum.kloud-worx.com has its own separate two-email Access policy — not the shared single-email policy above"
+      - "research-forum.kloud-worx.com and rf-pre-event.kloud-worx.com each have their own separate Access policy — not the shared single-email policy above"
   tags: [tunnel]
 
 # --- Cloudflare API credentials (shared by DNS + Access sections below) ---
@@ -406,6 +411,10 @@
   ansible.builtin.include_tasks: research-forum-access.yml
   tags: [access]
 
+- name: Provision Cloudflare Access application + policy for RF Pre-Event App
+  ansible.builtin.include_tasks: rf-pre-event-access.yml
+  tags: [access]
+
 - name: Provision Cloudflare Access application + policy for Gitea
   ansible.builtin.include_tasks: gitea-access.yml
   tags: [access]
@@ -419,6 +428,8 @@
       - "Session duration: {{ cloudflare_access_session_duration }}"
       - "Separately, {{ cloudflare_research_forum_hostname }} is protected by its own Access policy"
       - "Allowed identities: {{ cloudflare_research_forum_allowed_emails }} via {{ cloudflare_access_idp_name }}"
+      - "Separately, {{ cloudflare_rf_pre_event_hostname }} is protected by its own Access policy"
+      - "Allowed identities: {{ cloudflare_rf_pre_event_allowed_emails }} via {{ cloudflare_access_idp_name }}"
       - "Separately, {{ cloudflare_gitea_hostname }} is protected by its own Access policy"
       - "Allowed identities: {{ cloudflare_gitea_allowed_emails }} via {{ cloudflare_access_idp_name }}"
   tags: [access]

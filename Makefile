@@ -162,6 +162,11 @@ gitea-runner-rbac:
 	ansible-playbook ansible/playbooks/14-gitea-runner-rbac.yml \
 		-i $(INVENTORY) --tags gitea-runner-rbac $(ANSIBLE_ARGS)
 
+.PHONY: gitea-runner-rbac-rf-pre-event
+gitea-runner-rbac-rf-pre-event:
+	ansible-playbook ansible/playbooks/15-gitea-runner-rbac-rf-pre-event.yml \
+		-i $(INVENTORY) --tags gitea-runner-rbac $(ANSIBLE_ARGS)
+
 .PHONY: addons
 addons:
 	ansible-playbook ansible/playbooks/04-cluster-addons.yml \

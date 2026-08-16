@@ -365,6 +365,62 @@ confirm Longhorn pods only land on `cm4-node-3`.
   Gitea Actions secrets — actual app Deployment/Ingress/Service manifests
   are left to that repo's CI, same as research-forum-app.
 
+**August 16, 2026 — rpc-statd + Longhorn NFS lock fixes (backups unstuck):**
+
+Longhorn NFS backups were still not completing despite the July 26, 2026
+NFSv3-forcing fix (`?nfsOptions=vers%3D3`). Investigation found two separate,
+stacked root causes:
+
+- **Root cause 1 — rpc-statd not persistent on rk1-control.** All three RK1
+  nodes need `rpc.statd` (the NFSv3 lock manager) enabled at boot for NFS
+  client mounts to keep lock support across a reboot. Both worker nodes
+  already had it `static`/active, but rk1-control only had it running
+  transiently — not `enabled` — so it silently reverted after any reboot.
+  Fixed manually first:
+  ```bash
+  sudo mkdir -p /etc/systemd/system/remote-fs.target.wants
+  sudo ln -sf /lib/systemd/system/rpc-statd.service /etc/systemd/system/remote-fs.target.wants/rpc-statd.service
+  sudo systemctl daemon-reload
+  ```
+  then codified as an idempotent task in `ansible/roles/common/tasks/main.yml`
+  (`ansible.builtin.systemd: name: rpc-statd, enabled: true, state: started`)
+  so it applies to all three RK1 nodes on every `make common` run and survives
+  a future reflash.
+- **Root cause 2 — `longhorn-manager` pods can never see the host's rpc-statd
+  fix.** Even with rpc-statd correctly enabled on every node, backups still
+  failed lock registration, because `longhorn-manager` pods run without
+  `hostNetwork` and have no `rpcbind`/`rpc.statd` inside their own network
+  namespace — no host-level fix can ever reach an NFSv3 mount performed from
+  inside that pod. The actual fix was adding `nolock` to the backup-target's
+  `nfsOptions`, updating
+  `ansible/inventory/group_vars/all/vars.yml`'s `longhorn_backup_target` from
+  `...?nfsOptions=vers%3D3` to `...?nfsOptions=vers%3D3,nolock`, then
+  re-applying via `make longhorn-backup-target` (patches the Longhorn
+  `settings.longhorn.io backup-target` CRD; see
+  `ansible/roles/longhorn/tasks/backup-target.yml`).
+
+**Lessons learned:**
+- Leader-election-based controllers (Longhorn's manager runs one active
+  instance via leader election) mean a host-level symptom can look like it
+  depends on whichever node currently holds leadership — root cause 1 was
+  only visible on rk1-control today. But the underlying fix still needs to
+  ship cluster-wide, not just to today's leader: leadership moves on the next
+  restart/failover, and an unpatched node becoming leader next time would
+  reintroduce the exact same failure.
+- A host-level fix can look completely correct while the actual failure is
+  still happening inside a container's isolated network namespace. rpc-statd
+  being `enabled` and `active` on every node was not sufficient proof the bug
+  was fixed — it only became clear once verified from the actual failure
+  point (the `longhorn-manager` pod's own NFSv3 mount attempt), not just from
+  host-level `systemctl`/`rpcinfo` state.
+
+Verified: `systemctl is-enabled rpc-statd` returns `enabled` on all three RK1
+nodes; `kubectl -n longhorn-system get settings.longhorn.io backup-target -o
+jsonpath='{.value}'` reflects the `,nolock` value; `kubectl get
+backups.longhorn.io -n longhorn-system` shows backups actually completing,
+not just the RecurringJob/Volume-label objects existing (same verification
+discipline as the July 26 lesson above).
+
 ---
 
 ## Hardware — Cluster 1 (TuringPi 2.5)
@@ -785,6 +841,15 @@ http://10.0.0.40/v1   LiteLLM        http://10.0.0.35       MinIO
      `?nfsOptions=vers%3D3`. Always confirm with
      `kubectl get backups.longhorn.io -n longhorn-system`, not just
      RecurringJob/label existence.
+   - ✅ **Resolved August 16, 2026**: backups were still stuck after the
+     NFSv3 fix above, due to two further root causes — rpc-statd not
+     persistent on rk1-control (now enabled via the `common` role on all 3
+     nodes), and `longhorn-manager` pods having no hostNetwork/rpcbind so
+     NFSv3 lock registration always failed inside the pod regardless of host
+     state (fixed by adding `,nolock` to `longhorn_backup_target`'s
+     `nfsOptions`). See the August 16, 2026 STATUS entry above for the full
+     writeup and lessons learned. **Longhorn backups are now confirmed
+     completing, not just configured.**
 
 2. **Slot 3 / Orin NX Investigation** — re-test slot 3 with the Orin NX
    installed; the suspected DSA switch-silicon fault may actually have been

@@ -405,6 +405,13 @@ kubectl get pods -A
 make health
 ```
 
+### Longhorn NFS backups stuck/hung after a node reboot
+Check `rpc-statd` is enabled (not just running) on all 3 RK1 nodes:
+`systemctl is-enabled rpc-statd`. Also confirm the `backup-target` Setting CR's
+`nfsOptions` includes `nolock` — `longhorn-manager` pods have no hostNetwork/
+rpcbind, so NFSv3 lock registration fails inside the pod regardless of host
+state. Full incident writeup: `SESSION-HANDOFF.md`, "August 16, 2026" entry.
+
 ---
 
 ## Current State Summary

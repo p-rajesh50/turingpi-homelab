@@ -124,6 +124,19 @@
     state: absent
   when: leftover_containerd_service.stat.exists
 
+# rk1-control was found with rpc-statd running but not enabled — it would not
+# survive a reboot, unlike both worker nodes where it was already static/active.
+# rpc.statd handles NFSv3 lock registration; without it enabled at boot, NFSv3
+# client mounts on this node silently lose lock support after a restart. See
+# SESSION-HANDOFF.md "August 16, 2026 — rpc-statd + Longhorn NFS lock fixes" for
+# the full incident writeup (this was one of two root causes behind stuck
+# Longhorn NFS backups).
+- name: Enable and start rpc-statd (NFSv3 lock manager) at boot
+  ansible.builtin.systemd:
+    name: rpc-statd
+    enabled: true
+    state: started
+
 # Longhorn's instance-manager expects this directory to already exist when
 # starting a replica/engine process. If it's missing, replica start fails with
 # "open /var/log/instances/<name>.log: no such file or directory" — hit during

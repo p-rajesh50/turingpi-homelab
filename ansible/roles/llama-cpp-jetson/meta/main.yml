@@ -1,0 +1,4 @@
+---
+galaxy_info:
+  role_name: llama_cpp_jetson
+dependencies: []

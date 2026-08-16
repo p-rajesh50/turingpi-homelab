@@ -1,0 +1,117 @@
+---
+# Builds llama.cpp from source with CUDA support on a standalone Jetson Orin
+# device (Orin NX or Orin Nano). JetPack 7.2 / CUDA 13.2 must be pre-flashed.
+
+- name: Install build prerequisites
+  ansible.builtin.apt:
+    name:
+      - git
+      - cmake
+      - build-essential
+      - python3
+      - python3-venv
+      - python3-pip
+      - curl
+      - cuda-toolkit-13-2
+    state: present
+    update_cache: true
+  register: apt_install_result
+  until: apt_install_result is succeeded
+  retries: 5
+  delay: 15
+
+- name: Detect host gcc version
+  ansible.builtin.command: gcc -dumpversion
+  register: gcc_version_raw
+  changed_when: false
+
+- name: Verify gcc version is within CUDA 13.2's supported range
+  ansible.builtin.fail:
+    msg: >-
+      Detected gcc {{ gcc_version_raw.stdout }} (major version
+      {{ gcc_version_raw.stdout.split('.')[0] }}), which is outside the range
+      CUDA 13.2 supports on aarch64 (gcc {{ cuda_min_gcc }}.x - {{ cuda_max_gcc }}.x,
+      per NVIDIA's CUDA 13.2 Installation Guide for Linux). Install a supported
+      gcc version before building llama.cpp with GGML_CUDA=ON.
+  when: >-
+    (gcc_version_raw.stdout.split('.')[0] | int) < cuda_min_gcc or
+    (gcc_version_raw.stdout.split('.')[0] | int) > cuda_max_gcc
+
+- name: Clone/update llama.cpp
+  ansible.builtin.git:
+    repo: "{{ llama_cpp_repo }}"
+    dest: "{{ llama_cpp_dest }}"
+    version: "{{ llama_cpp_version }}"
+    force: false
+  become: false
+  register: llama_cpp_clone
+
+- name: Remove stale build directory after an upstream update
+  ansible.builtin.file:
+    path: "{{ llama_cpp_dest }}/build"
+    state: absent
+  become: false
+  when: llama_cpp_clone.changed
+
+- name: Configure CMake build (CUDA enabled)
+  ansible.builtin.command:
+    cmd: >-
+      cmake -B build
+      -DGGML_CUDA=ON
+      -DCMAKE_CUDA_ARCHITECTURES={{ cuda_arch }}
+      -DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc
+      -DCMAKE_BUILD_TYPE=Release
+      -DLLAMA_CURL=ON
+    chdir: "{{ llama_cpp_dest }}"
+    creates: "{{ llama_cpp_dest }}/build/Makefile"
+  become: false
+
+- name: Build llama.cpp
+  ansible.builtin.command:
+    cmd: "cmake --build build --config Release -j {{ llama_build_parallelism }}"
+    chdir: "{{ llama_cpp_dest }}"
+  become: false
+  changed_when: true
+  async: 7200
+  poll: 30
+
+- name: Ensure models directory exists
+  ansible.builtin.file:
+    path: "{{ llama_cpp_dest }}/models"
+    state: directory
+    mode: "0755"
+  become: false
+
+- name: Download tiny CUDA smoke-test model (TinyLlama 1.1B Q4_K_M)
+  ansible.builtin.get_url:
+    url: "{{ llama_test_model_url }}"
+    dest: "{{ llama_test_model_path }}"
+    mode: "0644"
+  become: false
+
+- name: Run CUDA inference smoke test
+  # llama-simple is the single-shot, non-interactive example binary — unlike
+  # llama-cli, it doesn't default into a chat REPL that hangs forever reading
+  # empty lines once stdin (closed by the command module) hits EOF.
+  ansible.builtin.command:
+    cmd: "./build/bin/llama-simple -m {{ llama_test_model_path }} -n 8 -ngl 99 hello"
+    chdir: "{{ llama_cpp_dest }}"
+  become: false
+  register: llama_smoke_test
+  changed_when: false
+
+- name: Fail if CUDA device was not detected (silent CPU-only build)
+  ansible.builtin.fail:
+    msg: >-
+      "ggml_cuda_init: found 1 CUDA devices" was not found in the llama-cli
+      output — the build likely compiled CPU-only. Full output:
+      {{ llama_smoke_test.stdout }} {{ llama_smoke_test.stderr }}
+  when: "'ggml_cuda_init: found 1 CUDA devices' not in (llama_smoke_test.stdout + llama_smoke_test.stderr)"
+
+- name: Print llama.cpp build summary
+  ansible.builtin.debug:
+    msg:
+      - "llama.cpp binary: {{ llama_cpp_dest }}/build/bin/llama-cli"
+      - "CUDA architecture: {{ cuda_arch }}"
+      - "Build parallelism: {{ llama_build_parallelism }}"
+      - "CUDA verification: found 1 CUDA devices — build is GPU-accelerated"

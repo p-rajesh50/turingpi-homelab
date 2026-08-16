@@ -1,0 +1,18 @@
+---
+llama_cpp_repo: https://github.com/ggml-org/llama.cpp
+llama_cpp_version: master
+llama_cpp_dest: "/home/{{ ansible_user }}/llama.cpp"
+llama_build_parallelism: "{{ ansible_processor_vcpus }}"   # host_vars override caps this on the Nano
+
+# GCC support range per NVIDIA's CUDA 13.2 Installation Guide for Linux, Table 3
+# (Supported Compilers), ARM64 SBSA row: "6.x - 15.x" — the documented min/max,
+# not per-minor-version pinning (nvcc checks major version only).
+# https://docs.nvidia.com/cuda/archive/13.2.0/cuda-installation-guide-linux/index.html
+cuda_min_gcc: 6
+cuda_max_gcc: 15
+
+# bartowski's TinyLlama-1.1B-Chat-v1.0-GGUF repo now returns 401 (gated/removed
+# upstream) — switched to TheBloke's equivalent quant, confirmed publicly
+# downloadable (verified 2026-08-15, ~405MB Q4_K_M).
+llama_test_model_url: "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+llama_test_model_path: "{{ llama_cpp_dest }}/models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"

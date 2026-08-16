@@ -42,6 +42,7 @@ help:
 	@echo "  GPU NODES (manual JetPack flash required first)"
 	@echo "    make jetson-orin      Configure Orin NX (Ollama, Open WebUI, ML stack)"
 	@echo "    make jetson-nano      Configure Jetson Nano (embeddings, small models)"
+	@echo "    make llama-cpp-jetson Build llama.cpp w/ CUDA on Orin NX + Orin Nano"
 	@echo ""
 	@echo "  MAINTENANCE"
 	@echo "    make health           Cluster health check"
@@ -194,6 +195,11 @@ jetson-orin:
 .PHONY: jetson-nano
 jetson-nano:
 	ansible-playbook ansible/playbooks/08-jetson-nano.yml \
+		-i $(INVENTORY) $(ANSIBLE_ARGS)
+
+.PHONY: llama-cpp-jetson
+llama-cpp-jetson:
+	ansible-playbook ansible/playbooks/16-llama-cpp-jetson.yml \
 		-i $(INVENTORY) $(ANSIBLE_ARGS)
 
 # ─────────────────────────────────────────────────────────────────────────────

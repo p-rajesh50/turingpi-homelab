@@ -1,0 +1,6 @@
+---
+- name: Build llama.cpp with CUDA on Jetson Orin devices
+  hosts: jetson_llm
+  become: true
+  roles:
+    - llama-cpp-jetson

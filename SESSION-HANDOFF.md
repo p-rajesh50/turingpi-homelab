@@ -332,6 +332,39 @@ confirm Longhorn pods only land on `cm4-node-3`.
   the "Install Ingress-NGINX" task in `ansible/playbooks/04-cluster-addons.yml`
   and applied live (confirmed via `kubectl get configmap`).
 
+**August 14-15, 2026 — rf-pre-event-app onboarded with isolated RBAC and Cloudflare Access:**
+
+- **New Gitea Actions runner RBAC for `rf-pre-event-app`**, a second Laravel
+  companion app to research-forum-app. Rather than parameterize the existing
+  `gitea-runner-rbac` role (namespace/SA name are hardcoded there), added a
+  parallel role `ansible/roles/gitea-runner-rbac-rf-pre-event/` — own
+  namespace `rf-pre-event-app`, own `gitea-runner-deployer`
+  ServiceAccount/Role/RoleBinding, own durable SA-token kubeconfig
+  (`~/.kube/turingpi-cluster1-rf-pre-event-app.conf`) — fully isolated from
+  research-forum-app's resources. `batch/jobs` and `pods/log` permissions
+  were included in the Role from the start this time, since they had to be
+  retrofitted for research-forum-app last session. New playbook
+  `ansible/playbooks/15-gitea-runner-rbac-rf-pre-event.yml` and Makefile
+  target `gitea-runner-rbac-rf-pre-event`.
+- **`rf-pre-event.kloud-worx.com` added to the Cloudflare Tunnel**, routing
+  to `ingress-nginx-controller.ingress-nginx.svc.cluster.local:80`, with its
+  own independent Access Application + Policy ("Allow RF Pre-Event App
+  team") covering the same five emails as research-forum-app
+  (`rajesh.pamulapati@gmail.com`, `pamulliving@gmail.com`,
+  `kdougl1@uic.edu`, `nkstout@uic.edu`, `sydelleb@uic.edu`) — new
+  `ansible/roles/cloudflare-tunnel/tasks/rf-pre-event-access.yml`, built
+  from the start with the idempotent update-in-place PUT logic (no
+  first-run-only gap to retrofit, unlike research-forum-access.yml
+  originally).
+- Verified live: `research-forum-app` namespace/RBAC/Access policy
+  unchanged (same `created_at` timestamps, existing secrets intact);
+  `rf-pre-event-app` got its own namespace/SA/Role/RoleBinding/token Secret
+  and its own Cloudflare Access Application; both new make targets are
+  idempotent on re-run (no changes on second pass). Kubeconfig for
+  `rf-pre-event-app`'s deployer output for manual paste into that repo's
+  Gitea Actions secrets — actual app Deployment/Ingress/Service manifests
+  are left to that repo's CI, same as research-forum-app.
+
 ---
 
 ## Hardware — Cluster 1 (TuringPi 2.5)

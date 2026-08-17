@@ -1,0 +1,163 @@
+---
+# ansible/playbooks/03e-rk1-control-nvme.yml
+# Migrates rk1-control's /var/lib/rancher (k3s data, containerd images/snapshots)
+# and Longhorn eMMC disk onto its previously-unpartitioned NVMe, using the same
+# proven mechanism as rk1-worker-1/rk1-worker-2 (see 03b-longhorn-nvme.yml and
+# SESSION-HANDOFF.md) — whole-disk ext4, LABEL-based fstab mount, /var/lib/rancher
+# symlinked to NVMe, Longhorn eMMC disk disabled+evicted after registering the
+# new nvme-disk. rk1-control is the SOLE control-plane node (no HA) — this
+# playbook is deliberately split into four tags, run one at a time, not as a
+# single unattended play. See the plan/SESSION-HANDOFF.md for the full risk
+# writeup and Phase 2's pod-impact checklist.
+#
+# 03b-longhorn-nvme.yml is intentionally NOT reused/extended here — it hardcodes
+# rk1-worker-1/rk1-worker-2 by literal hostname in its kubectl patch tasks, and
+# touching it risks the already-proven worker path. This is a separate,
+# rk1-control-only playbook using the identical mechanism instead.
+#
+# ⚠️  DO NOT run this playbook without an explicit --tags flag for exactly one
+# phase at a time. Ansible tags only filter execution when --tags/--skip-tags
+# is passed on the CLI — running this file with no --tags at all executes ALL
+# FOUR phases back-to-back unattended, including the control-plane-downtime
+# and known-Longhorn-bug-risk phases, defeating the entire point of splitting
+# this into separately-approved steps. Always: --tags rk1c-nvme-<phase>.
+
+# ── Phase 1: Format + mount NVMe (no downtime) ──────────────────────────────
+- name: Prepare NVMe disk for Longhorn/rancher on rk1-control
+  hosts: rk1-control
+  become: true
+  tags: [rk1c-nvme-format]
+
+  tasks:
+    - name: Format NVMe as ext4 with longhorn-nvme label
+      ansible.builtin.shell: mkfs.ext4 -L {{ longhorn_nvme_label }} {{ longhorn_nvme_device }}
+      args:
+        creates: /dev/disk/by-label/{{ longhorn_nvme_label }}
+
+    - name: Create Longhorn NVMe mount point
+      ansible.builtin.file:
+        path: "{{ longhorn_nvme_path }}"
+        state: directory
+        mode: "0755"
+
+    - name: Mount NVMe and persist to fstab
+      ansible.posix.mount:
+        path: "{{ longhorn_nvme_path }}"
+        src: "LABEL={{ longhorn_nvme_label }}"
+        fstype: ext4
+        opts: defaults,noatime
+        state: mounted
+
+# ── Phase 2: Migrate /var/lib/rancher onto NVMe (brief control-plane downtime) ──
+# k3s.service bundles the API server on this node — stopping it briefly takes
+# the whole cluster's API down, not just this node's workloads. See the plan's
+# Phase 2 verify checklist for exactly which pods on rk1-control restart
+# (coredns, ingress-nginx-controller, litellm are the single-replica ones with
+# cluster-wide impact; vault-0 is NOT on this node, unaffected).
+- name: Migrate /var/lib/rancher to NVMe on rk1-control
+  hosts: rk1-control
+  become: true
+  tags: [rk1c-nvme-migrate-rancher]
+
+  tasks:
+    - name: Check whether /var/lib/rancher is already migrated (symlink)
+      ansible.builtin.stat:
+        path: /var/lib/rancher
+      register: rancher_dir_stat
+
+    - name: Stop k3s server (brief cluster-wide API outage starts here)
+      ansible.builtin.systemd:
+        name: k3s
+        state: stopped
+      when: not rancher_dir_stat.stat.islnk
+
+    - name: Copy /var/lib/rancher to NVMe (rsync, preserves permissions/ownership)
+      ansible.builtin.command: rsync -a /var/lib/rancher/ /var/lib/longhorn-nvme/rancher/
+      when: not rancher_dir_stat.stat.islnk
+      changed_when: true
+
+    - name: Rename old /var/lib/rancher out of the way (rollback safety net, not deleted)
+      ansible.builtin.command: "mv /var/lib/rancher /var/lib/rancher.bak-{{ ansible_date_time.iso8601_basic_short }}"
+      when: not rancher_dir_stat.stat.islnk
+      changed_when: true
+
+    - name: Symlink /var/lib/rancher to NVMe
+      ansible.builtin.file:
+        src: /var/lib/longhorn-nvme/rancher
+        dest: /var/lib/rancher
+        state: link
+      when: not rancher_dir_stat.stat.islnk
+
+    - name: Start k3s server
+      ansible.builtin.systemd:
+        name: k3s
+        state: started
+
+    - name: Wait for control-plane node to register Ready again
+      ansible.builtin.shell: |
+        k3s kubectl get node rk1-control -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
+      args:
+        executable: /bin/bash
+      register: rk1_control_ready
+      until: rk1_control_ready.stdout == "True"
+      retries: 24
+      delay: 5
+      changed_when: false
+
+# ── Phase 3: Register NVMe disk in Longhorn (no downtime) ──────────────────
+- name: Register NVMe disk in Longhorn on rk1-control
+  hosts: rk1-control
+  become: false
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  tags: [rk1c-nvme-register-disk]
+
+  tasks:
+    - name: Add nvme-disk to rk1-control
+      ansible.builtin.shell: |
+        kubectl -n longhorn-system patch node.longhorn.io rk1-control \
+          --type=merge \
+          --patch='{"spec":{"disks":{"nvme-disk":{"path":"{{ longhorn_nvme_path }}","allowScheduling":true,"storageReserved":{{ longhorn_nvme_reserved }}}}}}'
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: Wait for Longhorn to recognize the new disk
+      ansible.builtin.pause:
+        seconds: 30
+
+# ── Phase 4: Disable + evict rk1-control's eMMC Longhorn disk (no downtime, ──
+# ── but this is the step that previously hit a Longhorn bug on this node) ──
+# If the eviction wait times out, roll back with:
+#   kubectl -n longhorn-system patch node.longhorn.io rk1-control --type=merge \
+#     --patch='{"spec":{"disks":{"default-disk-c198b0f7bc4dffa4":{"allowScheduling":true,"evictionRequested":false}}}}'
+- name: Disable and evict rk1-control's eMMC Longhorn disk
+  hosts: rk1-control
+  become: false
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  tags: [rk1c-nvme-evict-emmc]
+
+  tasks:
+    - name: Disable scheduling and request eviction on rk1-control's eMMC disk
+      ansible.builtin.shell: |
+        kubectl -n longhorn-system patch node.longhorn.io rk1-control \
+          --type=merge \
+          --patch='{"spec":{"disks":{"{{ longhorn_emmc_disk_name }}":{"path":"/var/lib/longhorn","allowScheduling":false,"evictionRequested":true,"storageReserved":0}}}}'
+      args:
+        executable: /bin/bash
+      register: rk1_control_emmc_patch
+      until: rk1_control_emmc_patch.rc == 0
+      retries: 6
+      delay: 10
+      changed_when: true
+
+    - name: Wait for eMMC replicas to migrate off rk1-control
+      ansible.builtin.shell: |
+        kubectl -n longhorn-system get replicas.longhorn.io -o json | \
+          python3 -c "import json,sys; d=json.load(sys.stdin); print(sum(1 for r in d['items'] if r['spec'].get('nodeID')=='rk1-control' and r['spec'].get('diskPath')=='/var/lib/longhorn'))"
+      register: rk1_control_emmc_remaining
+      until: rk1_control_emmc_remaining.stdout.strip() == "0"
+      retries: 60
+      delay: 10
+      changed_when: false

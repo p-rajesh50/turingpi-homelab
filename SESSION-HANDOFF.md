@@ -643,6 +643,96 @@ workloads (Prometheus/Grafana/Loki) on Cluster 2 yet — storage-layer prep
 only. See roadmap item 5 below, which still tracks the CM4
 UFW/fail2ban/chrony hardening gap as a separate, still-open follow-up.
 
+**August 17, 2026 — rk1-control's containerd/k3s + Longhorn eMMC disk
+migrated to NVMe:**
+
+Cluster 1's sole control-plane node (`rk1-control`, no HA) had its
+`/dev/nvme0n1` sitting completely raw and unpartitioned since the original
+worker migrations, per an open follow-up in this file. Investigated first
+(not assumed) exactly how `rk1-worker-2`'s proven NVMe migration worked, since
+the goal was to reuse that exact mechanism, not a superficially-similar new
+one:
+
+- The eMMC-usage root cause on the workers was mostly a leftover kubeadm-era
+  `containerd.service` (K3s embeds its own containerd; this one was dead
+  weight) — already fixed on `rk1-control` by the `common` role, confirmed
+  live (`masked`/`inactive`, `/var/lib/containerd` doesn't exist).
+- The actual `/var/lib/rancher` → NVMe move is a **symlink**, not a
+  bind-mount — but the codified Ansible logic in `k3s-server`/`k3s-agent`
+  only prevents *regression* on a fresh install (`when: not
+  item.stat.exists`); the original data move on the workers was done by
+  hand, once, and was never written as a reusable Ansible task anywhere.
+  This session wrote that missing step for the first time.
+- NVMe formatting is **whole-disk `mkfs.ext4`, no partition table**, mounted
+  via a **LABEL-based** (not UUID-based) fstab entry — confirmed live on
+  `rk1-worker-2` before replicating, to genuinely match the proven pattern
+  (this differs from the UUID-based approach used for Cluster 2's SATA disks
+  the day before, which was UUID by a separate explicit decision for that
+  work).
+- `03b-longhorn-nvme.yml` hardcodes the two workers by literal hostname —
+  rather than risk that already-proven path, wrote a new, separate,
+  `rk1-control`-only playbook (`ansible/playbooks/03e-rk1-control-nvme.yml`)
+  using the identical mechanism, split into four independently-tagged phases
+  (`rk1c-nvme-format`, `rk1c-nvme-migrate-rancher`,
+  `rk1c-nvme-register-disk`, `rk1c-nvme-evict-emmc`) run one at a time with
+  explicit approval between each — not as a single unattended script, given
+  the single-point-of-failure risk.
+
+**Pre-flight risk check, done before touching anything**: confirmed
+`vault-0` is **not** scheduled on `rk1-control` (it's on `rk1-worker-1`,
+unaffected) — only `vault-agent-injector` (the sidecar webhook, not Vault
+itself) is on this node. Real single-replica exposure found instead:
+`coredns`, `ingress-nginx-controller`, and `litellm` each have their only
+instance on `rk1-control`. In practice, stopping/starting `k3s.service`
+didn't even restart these pods — containerd's shim processes survived the
+brief outage (`RESTARTS`/`AGE` on all three were unchanged afterward) — a
+gentler outcome than planned for.
+
+**All four phases completed successfully**:
+1. NVMe formatted/mounted — matches `rk1-worker-2` exactly (`ext4`,
+   `LABEL=longhorn-nvme`, no partition, `/var/lib/longhorn-nvme`).
+2. `/var/lib/rancher` migrated: stopped `k3s.service`, `rsync -a` to NVMe,
+   old directory renamed (not deleted) to `/var/lib/rancher.bak-<timestamp>`
+   as a rollback safety net, symlinked, `k3s.service` restarted. Verified
+   with `sudo du -sh` (permission-denied without sudo badly undercounted the
+   first check) — both copies **8.7G**, byte-for-byte match; file count
+   differed by ~196 (~0.17%), almost certainly transient socket/PID files
+   present only while k3s was running, not real data loss.
+   - **Bug found and fixed live**: the readiness-check task's jsonpath
+     quoting broke under `ansible.builtin.command`'s `shlex` parsing (which
+     strips quote characters appearing mid-argument, turning
+     `@.type=="Ready"` into invalid `@.type==Ready`) — switched to
+     `ansible.builtin.shell` with proper quoting, tested directly over SSH
+     before re-running. Re-run was a clean no-op on the already-completed
+     risky steps (symlink guard) and passed the readiness check correctly.
+3. `nvme-disk` registered in Longhorn on `rk1-control` — `Ready`/`Schedulable`
+   both `True`, ~997GB available.
+4. eMMC disk (`default-disk-c198b0f7bc4dffa4`) disabled + eviction
+   requested. **The previously-recorded Longhorn bug on this exact node
+   (`open /var/log/instances/<name>.log: no such file or directory`, which
+   forced a revert last time) did not recur** — `/var/log/instances` already
+   existed live (a fix added after that earlier failed attempt), and this
+   time both replicas migrated cleanly to `rk1-worker-1`/`rk1-worker-2` with
+   zero volume degradation throughout (watched live via
+   `kubectl get volumes.longhorn.io` during the eviction, not just the final
+   result).
+
+**Result**: `rk1-control`'s eMMC usage dropped **63% → 49%** (17G → 14G).
+Smaller than `rk1-worker-2`'s 86%→35% since the `containerd.service` cleanup
+had already happened here; most of the remaining gap is the still-present
+`/var/lib/rancher.bak-20260816T235021` (8.7G) — left on eMMC deliberately, not
+auto-deleted, for manual removal once stability is confirmed over the next
+few days.
+
+Verified end state: all 3 nodes `Ready`; all 9 Longhorn volumes
+`healthy`/`attached` throughout, zero degradation; `rk1-control`'s eMMC disk
+shows `allowScheduling: false`, `evictionRequested: true`, 0 replicas
+remaining; `nvme-disk` `Ready`/`Schedulable`.
+
+**Follow-up, not yet done**: remove `/var/lib/rancher.bak-20260816T235021`
+from `rk1-control` once stability is confirmed (manual, deliberately not
+automated).
+
 ---
 
 ## Hardware — Cluster 1 (TuringPi 2.5)
@@ -838,6 +928,7 @@ why nothing else moved there). `/var/lib/rancher` was moved to
 does have a mounted NVMe filesystem; **rk1-control's NVMe (`/dev/nvme0n1`,
 ~954G) is physically present but completely unpartitioned/unmounted**, so
 `/var/lib/rancher` stays on rk1-control's eMMC (not critical there anyway).
+**Resolved August 17, 2026** — see that dated STATUS entry below.
 
 Permanent fix for future installs: `ansible/roles/common/tasks/main.yml` now
 strips the leftover `containerd.service` on any node that still has it (safe
@@ -1145,12 +1236,14 @@ http://10.0.0.40/v1   LiteLLM        http://10.0.0.35       MinIO
   needed before LiteLLM can be scraped by Prometheus.
 - **ArgoCD** — GitOps operator for self-healing Helm deployments; see
   CLAUDE.md's Future Enhancements Backlog for the full ranked list.
-- **Longhorn replica eviction from rk1-control's eMMC** — blocked by the
-  Longhorn `/var/log/instances` bug (see `docs/runbook.md`); 2 replicas are
-  healthy there today (46% eMMC usage), not urgent.
-- **rk1-control's NVMe is unpartitioned** (`/dev/nvme0n1`, ~954G) — raw disk,
-  needs partitioning/formatting before use; not something the existing
-  `longhorn-nvme` role handles today.
+- ✅ **Longhorn replica eviction from rk1-control's eMMC — RESOLVED August 17,
+  2026**. The `/var/log/instances` bug did not recur (a fix landed since the
+  original attempt); both replicas migrated cleanly to `rk1-worker-1`/
+  `rk1-worker-2`. See that dated STATUS entry above.
+- ✅ **rk1-control's NVMe partitioned/formatted/mounted — RESOLVED August 17,
+  2026**, via a new dedicated playbook (`03e-rk1-control-nvme.yml`), same
+  proven mechanism as the workers. `/var/lib/rancher` now symlinked there
+  too. See that dated STATUS entry above.
 - **Add real Anthropic and Gemini API keys to Vault** — `secret/llm-keys`
   still holds placeholder values from initial setup; Claude/Gemini routes in
   LiteLLM won't authenticate until real keys replace them.
@@ -1250,8 +1343,8 @@ NX (deferred pending slot 3 investigation above), TrueNAS integration, Cluster 2
 
 | Node | Device | Size | Type | Use |
 |---|---|---|---|---|
-| rk1-control | /dev/nvme0n1 | 953.9GB | NVMe | **Unpartitioned/unmounted** — not in use |
-| rk1-control | /dev/mmcblk0 | 29.1GB | eMMC | Boot OS + rancher (no NVMe to move it to) — 46% used |
+| rk1-control | /dev/nvme0n1 | 953.9GB | NVMe | Longhorn + rancher (symlinked from eMMC) — since Aug 17, 2026 |
+| rk1-control | /dev/mmcblk0 | 29.1GB | eMMC | Boot OS only, Longhorn scheduling disabled — 49% used |
 | rk1-worker-1 | /dev/nvme0n1 | 953.9GB | NVMe | Longhorn + rancher (symlinked from eMMC) |
 | rk1-worker-1 | /dev/sda2 | 476.4GB | SATA (mini-PCIe adapter) | NFS export |
 | rk1-worker-1 | /dev/mmcblk0 | 29.1GB | eMMC | Boot OS — 22% used |

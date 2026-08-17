@@ -7,3 +7,10 @@ longhorn_replica_count_cluster2: 1        # only cm4-node-3 runs Longhorn — no
 longhorn_storage_path_cluster2: "/var/lib/longhorn"
 longhorn_version_cluster2: "1.6.2"        # matches Cluster 1's pinned version today
 longhorn_cm4_emmc_disk_name: "default-disk-3031f08ccc92ad69"   # cm4-node-3's auto-created eMMC default disk — excluded from scheduling
+
+# Cluster 2's own TrueNAS backup subdirectory — distinct from Cluster 1's
+# longhorn_backup_target (all/vars.yml) so two independent Longhorn
+# installations never write backups to the same NFS path. MANUAL PREREQUISITE:
+# the longhorn-backups-cluster2 directory/export must be created on TrueNAS
+# (https://10.0.0.5) before this works — Ansible can't create it.
+longhorn_backup_target_cluster2: "nfs://10.0.0.5:/mnt/SSDStorage/kubernetes/longhorn-backups-cluster2?nfsOptions=vers%3D3,nolock"

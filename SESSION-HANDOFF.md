@@ -559,6 +559,85 @@ behavior there), and `21-cluster2-longhorn.yml` sets
 `longhorn_install_nfs_provisioner: false`. Cluster 2 doesn't need NFS-backed
 storage — the two SATA disks on `cm4-node-3` above cover its storage need.
 
+**Caught and resolved: vault-volume label failure + a deeper tag-gating
+misunderstanding.** The next `21-cluster2-longhorn.yml` run failed at "Label
+Vault volume for vault-snapshot and vault-backup recurring jobs" —
+`ansible/roles/longhorn/tasks/recurring-jobs.yml` hardcodes Cluster 1's vault
+PVC ID (`longhorn_vault_volume`) and labels it unconditionally; Cluster 2 has
+no volumes yet, so it failed with `NotFound`. Root cause turned out to be
+deeper than one unguarded task: both `recurring-jobs.yml` and
+`backup-target.yml` are included from the role's `main.yml` behind
+`tags: [...]`, with comments claiming they "only run when `--tags` is
+explicitly requested." **That's a misunderstanding of Ansible tag
+semantics** — tags only filter execution when `--tags`/`--skip-tags` is
+explicitly passed on the CLI; absent that flag (true for
+`21-cluster2-longhorn.yml`, and also true for Cluster 1's own
+`03-storage.yml`/`03b-longhorn-nvme.yml`), every task runs regardless of its
+tag. This means `backup-target.yml` had *also* already silently run against
+Cluster 2 — and since a `kubectl patch settings.longhorn.io backup-target`
+doesn't `NotFound` the way the volume label did, it succeeded silently,
+leaving Cluster 2's `backup-target` Setting pointed at Cluster 1's exact
+TrueNAS path (confirmed live before the fix:
+`nfs://10.0.0.5:/mnt/SSDStorage/kubernetes/longhorn-backups?nfsOptions=vers%3D3,nolock`,
+byte-for-byte Cluster 1's URL).
+
+Fixed both `include_tasks` calls in `main.yml` with real `when:` gates
+(`longhorn_configure_backup_target`/`longhorn_configure_vault_recurring_jobs`,
+both defaulting `true` — Cluster 1 unaffected) and corrected the stale
+comments. **Design decision**: rather than disabling Cluster 2's backup
+target outright, gave it its own distinct TrueNAS path —
+`nfs://10.0.0.5:/mnt/SSDStorage/kubernetes/longhorn-backups-cluster2?nfsOptions=vers%3D3,nolock`
+(new `longhorn_backup_target_cluster2` var in `cluster2.yml`, overriding
+`longhorn_backup_target` at the play level in `21-cluster2-longhorn.yml`) —
+so two independent Longhorn installations never write backups to the same NFS
+directory. Vault recurring-jobs stays disabled for Cluster 2
+(`longhorn_configure_vault_recurring_jobs: false`) — it has no Vault or
+Postgres volumes to snapshot/back up, so the RecurringJob CRs would be inert,
+misleading dead config.
+
+**Manual prerequisite — done**: the `longhorn-backups-cluster2` directory/NFS
+export was created on TrueNAS (`https://10.0.0.5`) before the next
+`make cluster2-longhorn` run, mirroring `longhorn-backups` (Cluster 1's
+existing export). Confirmed live below — the backup-target patch succeeded
+and the readback assert passed against the new `-cluster2` path.
+
+Because the playbook failed before reaching the SATA disk setup plays (later,
+separate top-level plays in the same file), those never ran on the previous
+attempt.
+
+**Caught and resolved: Longhorn admission-webhook race between back-to-back
+disk patches.** The next attempt (after the TrueNAS `longhorn-backups-cluster2`
+export was created) reached the SATA disk plays and got further, but
+"Add sata2-disk to cm4-node-3" was rejected by Longhorn's admission webhook:
+`"spec and status of disks on node cm4-node-3 are being syncing and please
+retry later"` — the `sata1-disk` patch immediately before it kicks off
+reconciliation that hadn't finished before the next patch landed. Fixed with a
+retry loop (`register`/`until`/`retries: 6`/`delay: 10`, ~60s headroom) on the
+`sata2-disk` and eMMC-disable patch tasks, rather than a blind fixed pause —
+retries exactly as long as needed. **Confirmed idempotent**: `sata1-disk`
+(already applied from the prior run) re-applied cleanly as a no-op merge
+patch; the eMMC-disable task actually hit the race on this run too
+(`FAILED - RETRYING... (6 retries left)`, succeeded on the second attempt),
+confirming the fix works for real, not just in theory.
+
+**Live run now fully completed** (`PLAY RECAP: failed=0` on both `cm4-node-1`
+and `cm4-node-3`). Final state, verified directly:
+- `backup-target`: `nfs://10.0.0.5:/mnt/SSDStorage/kubernetes/longhorn-backups-cluster2?nfsOptions=vers%3D3,nolock`
+- No RecurringJobs on Cluster 2 — also found and deleted two stray
+  `vault-backup`/`vault-snapshot` RecurringJob CRs left over from before the
+  `longhorn_configure_vault_recurring_jobs: false` gate was added (created
+  33 minutes earlier, inert — `groups: []`, no volumes ever labeled — but
+  contradicted the decision that Cluster 2 shouldn't have them at all).
+- `cm4-node-3` disk status (`kubectl get nodes.longhorn.io ... -o
+  jsonpath='{.status.diskStatus}'`): `default-disk-3031f08ccc92ad69`
+  (`allowScheduling: false`, `Ready`/`Schedulable` both `True` — OS-only, as
+  intended), `sata1-disk` and `sata2-disk` (`allowScheduling: true`,
+  `Ready`/`Schedulable` both `True`, ~938GB available each — ~1.9TB total
+  schedulable storage). `df -h` on `cm4-node-3` confirms both mounts live.
+
+Cluster 2's storage layer (K3s, Longhorn scoped to `cm4-node-3`, MetalLB,
+SATA disks, isolated backup target) is now fully deployed and verified.
+
 **Not done this session** (explicitly out of scope): no observability
 workloads (Prometheus/Grafana/Loki) on Cluster 2 yet — storage-layer prep
 only. See roadmap item 5 below, which still tracks the CM4

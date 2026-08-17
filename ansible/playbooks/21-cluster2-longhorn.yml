@@ -49,6 +49,21 @@
     # Cluster 2 at Cluster 1's NFS server. Cluster 2's storage need is
     # covered by the SATA disks on cm4-node-3 registered below.
     longhorn_install_nfs_provisioner: false
+    # Cluster 2 backs up to its own distinct TrueNAS subdirectory, not
+    # Cluster 1's — two independent Longhorn installations writing backups
+    # to the exact same NFS path risks collisions. backup-target.yml just
+    # reads whatever longhorn_backup_target resolves to (no hardcoded path
+    # in the task itself), so overriding it here is enough; no role changes
+    # needed beyond the tag-gating fix in ansible/roles/longhorn/tasks/main.yml.
+    #
+    # MANUAL PREREQUISITE: the longhorn-backups-cluster2 directory/export
+    # must be created on TrueNAS via https://10.0.0.5 before this works —
+    # Ansible has no TrueNAS role/access to create NFS exports.
+    longhorn_backup_target: "{{ longhorn_backup_target_cluster2 }}"
+    # Cluster 2 has no Vault or Postgres volumes to snapshot/back up yet —
+    # without this, recurring-jobs.yml fails trying to label Cluster 1's
+    # hardcoded vault PVC ID (which doesn't exist on Cluster 2 at all).
+    longhorn_configure_vault_recurring_jobs: false
   roles:
     - role: longhorn
 
@@ -120,6 +135,11 @@
         executable: /bin/bash
       changed_when: true
 
+    # Longhorn's admission webhook rejects a disk-spec patch while it's still
+    # syncing the previous one ("spec and status of disks on node cm4-node-3
+    # are being syncing and please retry later") — the sata1-disk patch above
+    # kicks off reconciliation that isn't always done before this task lands.
+    # Retry rather than a blind fixed pause.
     - name: Add sata2-disk to cm4-node-3
       ansible.builtin.shell: |
         kubectl -n longhorn-system patch node.longhorn.io cm4-node-3 \
@@ -127,8 +147,14 @@
           --patch='{"spec":{"disks":{"sata2-disk":{"path":"/mnt/sata2","allowScheduling":true,"storageReserved":0}}}}'
       args:
         executable: /bin/bash
+      register: cm4_sata2_disk_patch
+      until: cm4_sata2_disk_patch.rc == 0
+      retries: 6
+      delay: 10
       changed_when: true
 
+    # Same sync-race risk as sata2-disk above — this patches the node's disk
+    # spec again right after another disk was just added.
     - name: Disable scheduling on the eMMC default disk (OS-only, not storage)
       ansible.builtin.shell: |
         kubectl -n longhorn-system patch node.longhorn.io cm4-node-3 \
@@ -136,4 +162,8 @@
           --patch='{"spec":{"disks":{"{{ longhorn_cm4_emmc_disk_name }}":{"path":"/var/lib/longhorn","allowScheduling":false,"evictionRequested":true,"storageReserved":0}}}}'
       args:
         executable: /bin/bash
+      register: cm4_emmc_disk_patch
+      until: cm4_emmc_disk_patch.rc == 0
+      retries: 6
+      delay: 10
       changed_when: true

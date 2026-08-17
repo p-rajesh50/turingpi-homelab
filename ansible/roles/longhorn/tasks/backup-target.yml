@@ -1,10 +1,12 @@
 ---
 # ansible/roles/longhorn/tasks/backup-target.yml
-# Points Longhorn's backup target at the TrueNAS NFS export
-# (10.0.0.5:/mnt/SSDStorage/kubernetes/longhorn-backups). NFS backup targets
-# need no credential secret, so backup-target-credential-secret is left as-is.
-# Only included when the longhorn-backup-target tag is explicitly requested —
-# never part of the default (untagged) role run.
+# Points Longhorn's backup target at the value of {{ longhorn_backup_target }}
+# (Cluster 1: TrueNAS NFS export at 10.0.0.5:/mnt/SSDStorage/kubernetes/longhorn-backups;
+# Cluster 2 overrides this to its own longhorn-backups-cluster2 path — see
+# 21-cluster2-longhorn.yml). NFS backup targets need no credential secret, so
+# backup-target-credential-secret is left as-is. Gated by
+# longhorn_configure_backup_target in main.yml (defaults true) — NOT by the
+# tags below, which only filter when --tags/--skip-tags is explicitly passed.
 
 - name: Set Longhorn backup-target to TrueNAS NFS export
   ansible.builtin.shell: |

@@ -73,15 +73,24 @@
       - "Longhorn UI:     kubectl port-forward -n longhorn-system svc/longhorn-frontend 8080:80"
       - "StorageClasses:  longhorn (default, NVMe replicated) | nfs-shared (SATA, shared)"
 
-# Only runs when --tags longhorn-backup-target is explicitly requested (see
-# ansible/playbooks/03c-longhorn-backup-target.yml) — not part of the default
-# untagged role run, so make storage/make longhorn-nvme are unaffected.
+# NOTE: tags alone do NOT gate this — Ansible only skips tagged tasks when
+# --tags/--skip-tags is explicitly passed on the CLI; with no such flag (as
+# in 03-storage.yml, 03b-longhorn-nvme.yml, and 21-cluster2-longhorn.yml),
+# every task here runs regardless of its tag. The `when:` below is the real
+# gate — added after this was discovered to be silently running (and
+# succeeding) against Cluster 2, pointing its backup-target at Cluster 1's
+# exact TrueNAS path. Still enabled by default for Cluster 2 (see
+# 21-cluster2-longhorn.yml) — just overrides longhorn_backup_target to a
+# distinct path, doesn't disable backups outright.
 - name: Configure Longhorn backup target
   ansible.builtin.include_tasks: backup-target.yml
+  when: longhorn_configure_backup_target | default(true)
   tags: [longhorn-backup-target]
 
-# Only runs when --tags longhorn-recurring-jobs is explicitly requested —
-# not part of the default untagged role run.
+# NOTE: same tag-gating caveat as above — this always runs unless explicitly
+# gated. Cluster 2 has no matching volumes (Vault isn't deployed there), so
+# this is disabled for it in 21-cluster2-longhorn.yml.
 - name: Configure Longhorn recurring jobs
   ansible.builtin.include_tasks: recurring-jobs.yml
+  when: longhorn_configure_vault_recurring_jobs | default(true)
   tags: [longhorn-recurring-jobs]

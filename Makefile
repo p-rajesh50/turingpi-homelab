@@ -44,6 +44,11 @@ help:
 	@echo "    make jetson-nano      Configure Jetson Nano (embeddings, small models)"
 	@echo "    make llama-cpp-jetson Build llama.cpp w/ CUDA on Orin NX + Orin Nano"
 	@echo ""
+	@echo "  CLUSTER 2 (CM4)"
+	@echo "    make cluster2-k3s      K3s cluster (server + agents, default Flannel CNI)"
+	@echo "    make cluster2-longhorn Longhorn storage, scoped to cm4-node-3 only"
+	@echo "    make cluster2-metallb  MetalLB with its own IP pool (10.0.0.60-69)"
+	@echo ""
 	@echo "  MAINTENANCE"
 	@echo "    make health           Cluster health check"
 	@echo "    make teardown         Reset K8s on all nodes (keeps OS)"
@@ -171,6 +176,21 @@ gitea-runner-rbac-rf-pre-event:
 .PHONY: addons
 addons:
 	ansible-playbook ansible/playbooks/04-cluster-addons.yml \
+		-i $(INVENTORY) $(ANSIBLE_ARGS)
+
+.PHONY: cluster2-k3s
+cluster2-k3s:
+	ansible-playbook ansible/playbooks/20-cluster2-kubernetes.yml \
+		-i $(INVENTORY) $(ANSIBLE_ARGS)
+
+.PHONY: cluster2-longhorn
+cluster2-longhorn:
+	ansible-playbook ansible/playbooks/21-cluster2-longhorn.yml \
+		-i $(INVENTORY) $(ANSIBLE_ARGS)
+
+.PHONY: cluster2-metallb
+cluster2-metallb:
+	ansible-playbook ansible/playbooks/22-cluster2-metallb.yml \
 		-i $(INVENTORY) $(ANSIBLE_ARGS)
 
 .PHONY: secrets

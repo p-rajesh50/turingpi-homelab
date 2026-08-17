@@ -421,6 +421,149 @@ backups.longhorn.io -n longhorn-system` shows backups actually completing,
 not just the RecurringJob/Volume-label objects existing (same verification
 discipline as the July 26 lesson above).
 
+**August 16, 2026 — Cluster 2 (CM4) K3s build implemented and applied live
+(four bugs found and fixed, SATA storage added on cm4-node-3):**
+
+Implemented the "Cluster 2 K3s bring-up plan" from the July 26, 2026 (planning)
+entry above — single control-plane on `cm4-node-1` (K3s default SQLite
+datastore), default Flannel CNI, workers `cm4-node-2`/`cm4-node-3`/
+`cm4-node-4`, Longhorn scoped to `cm4-node-3` only, MetalLB pool
+`10.0.0.60-10.0.0.69`. Fully isolated from Cluster 1 — forked (not
+parameterized) roles, separate inventory groups, separate playbooks, separate
+kubeconfig.
+
+- **New forked roles** `ansible/roles/k3s-server-cm4/` and
+  `ansible/roles/k3s-agent-cm4/`, copied from `k3s-server`/`k3s-agent` with:
+  NVMe-symlink relocation logic dropped (no NVMe on CM4), `--flannel-backend=none`/
+  `--disable-network-policy` dropped (default Flannel), `delegate_to: rk1-control`
+  → `delegate_to: cm4-node-1` hardcoded, kubeconfig fetched to
+  `~/.kube/turingpi-cluster2.conf`. Cluster 1's `k3s-server`/`k3s-agent` roles
+  are untouched — confirmed via `git diff` showing zero changes to either.
+- **New inventory groups** `cm4_nodes`/`cm4_control`/`cm4_workers`/`cluster2`
+  in `ansible/inventory/hosts.yml`, plus a new
+  `ansible/inventory/group_vars/cluster2.yml` for cluster2-scoped vars
+  (`k3s_version_cluster2`, `k3s_server_ip_cluster2`,
+  `longhorn_replica_count_cluster2: 1`, etc.). `metallb_ip_range_cluster2` in
+  the shared `all/vars.yml` corrected from `10.0.0.50-10.0.0.69` to
+  `10.0.0.60-10.0.0.69` — `.50` is now the Orin Nano's static IP (claimed in a
+  later session than when that var was originally written).
+- **Bug caught during implementation**: the forked roles and new playbooks
+  build paths like `/home/{{ admin_user }}/.kube/config`, but `admin_user`
+  resolves globally to `"ubuntu"` (from `all/vars.yml`) — wrong for CM4 hosts,
+  which use `ansible_user: raj`. Fixed by using `{{ ansible_user }}` directly
+  in the new roles/playbooks instead of `admin_user`, and — since the reused
+  `longhorn` role's own tasks hardcode `{{ admin_user }}` internally, not
+  inherited from the calling play's `environment:` block — overriding
+  `admin_user: "{{ ansible_user }}"` at the play `vars:` level in
+  `21-cluster2-longhorn.yml` so the unmodified role still resolves the right
+  path. Confirmed via `ansible-inventory --host cm4-node-3` showing
+  `ansible_user: raj` vs. `admin_user: ubuntu` side by side before the fix.
+- **Longhorn scoping — corrected approach**: initially planned a
+  `longhorn.io/exclude=true:NoSchedule` taint on the three non-storage nodes,
+  but that's not a Longhorn-recognized key and a generic `NoSchedule` taint
+  would have blocked all workloads (not just storage) from those nodes.
+  Corrected to Longhorn's actual documented mechanism: label `cm4-node-3` with
+  `node.longhorn.io/create-default-disk=true` and set the Longhorn Setting
+  `create-default-disk-on-labeled-nodes=true` (`21-cluster2-longhorn.yml`).
+  All 4 nodes remain fully schedulable for general workloads — no taints
+  applied anywhere.
+- **New playbooks**: `20-cluster2-kubernetes.yml` (OS prep + K3s server/agent),
+  `21-cluster2-longhorn.yml` (label + Longhorn install via the existing,
+  unmodified `longhorn` role), `22-cluster2-metallb.yml` (MetalLB +
+  `cluster2-pool`/`cluster2-l2`). New Makefile targets `cluster2-k3s`,
+  `cluster2-longhorn`, `cluster2-metallb`.
+- **Known gap, flagged not silently omitted**: `20-cluster2-kubernetes.yml`'s
+  OS-prep play only forks in the swap-disable fix from the `common` role
+  (Cluster 1's documented kubelet-crash-on-reboot incident) — it does **not**
+  apply UFW, fail2ban, chrony, or any other `common`-role hardening to
+  `cm4_nodes`, since the full `common` role is Cluster-1-scoped
+  (`hosts: rk1_nodes`). CM4 nodes currently have no firewall/fail2ban/NTP
+  hardening. Tracked as a follow-up below, not a silent omission.
+- **All YAML/playbook syntax validated** (`ansible-playbook --syntax-check`
+  on all three new playbooks, `ansible-inventory --graph` confirms the new
+  group nesting).
+
+**Live deployment — four bugs found, all fixed and folded back into the code:**
+
+1. **`open-iscsi` and `ufw` missing on CM4 nodes.** `longhorn-manager`
+   crash-looped with `"Failed environment check... iscsiadm not found"` —
+   Longhorn needs `iscsiadm` on the host for iSCSI-backed volume attachment.
+   Separately, `k3s-server-cm4`'s "Allow K3s API server port through UFW" task
+   failed outright because `ufw` wasn't installed. Both packages are normally
+   installed by Cluster 1's `common` role, which `cm4_nodes` never runs. Fixed
+   by forking in `open-iscsi` install + `iscsid` enable, and a plain `ufw`
+   package install, into `20-cluster2-kubernetes.yml`'s OS-prep play.
+2. **CM4/CM5 nodes need `cgroup_memory=1 cgroup_enable=memory` on the kernel
+   cmdline.** Without it, k3s fails to start with `"failed to find memory
+   cgroup (v2)"` — this is a Raspberry Pi/CM-family default (cgroup v2 memory
+   controller isn't enabled by default the way it is on generic ARM server
+   images). Fixed with an idempotent check-append-reboot task in
+   `20-cluster2-kubernetes.yml`, placed last in the OS-prep play (only reboots
+   once, after all other package installs).
+3. **Wrong Longhorn Setting name, and a real ordering bug, not just a typo.**
+   `create-default-disk-on-labeled-nodes` doesn't exist in Longhorn v1.6.2 —
+   confirmed via `helm show values longhorn/longhorn --version 1.6.2` (run
+   identically from both rk1-control and cm4-node-1, byte-for-byte matching
+   output) that the real key is `create-default-disk-labeled-nodes`
+   (`defaultSettings.createDefaultDiskLabeledNodes` in Helm values). Beyond
+   the name, a `kubectl patch settings.longhorn.io` run as a `post_tasks` step
+   *after* `helm upgrade --install ... --wait` is fundamentally too late — by
+   the time `--wait` returns, longhorn-manager pods are already Ready and have
+   already run their default-disk auto-creation logic once per node. Fixed by
+   moving the setting into the Helm chart's own `defaultSettings` block
+   (`ansible/roles/longhorn/tasks/main.yml`, one new Jinja-conditional line,
+   gated on a var that's undefined — and therefore a no-op — for every
+   Cluster 1 invocation), applied atomically at chart-install time with zero
+   race window, instead of a racy post-install patch.
+4. **Consequence of #3: all 4 nodes got an auto-created eMMC/SD-backed
+   default Longhorn disk before the fix landed.** Removed by hand from
+   `cm4-node-1`/`cm4-node-2`/`cm4-node-4`: `allowScheduling: false` +
+   `evictionRequested: true` first, *then* delete — Longhorn's admission
+   webhook rejects deleting a disk that's still schedulable, and (separately)
+   a single empty-object `kubectl patch` is a no-op under JSON Merge Patch
+   semantics (merging `{}` into an existing key changes nothing) — the disk
+   key itself has to be explicitly set to `null` to remove it. The corrected
+   playbook (fix #3) prevents this from recurring on any future
+   `make cluster2-longhorn` run or reflash.
+
+**New: SATA storage added on cm4-node-3.** Two unmounted 1TB SATA SSDs
+(`/dev/sda` "Inland SATA SSD", `/dev/sdb` "P3-1TB") alongside the 14.6GB eMMC
+boot disk. Decision: used as **two separate Longhorn disks, not RAID1** — with
+TrueNAS backups already in place and a weekly retention purge planned,
+disk-level redundancy isn't worth the write-amplification/capacity cost for
+this homelab. Before formatting, verified with `file -s /dev/sda1` (byte-for-byte
+raw output shown to and confirmed by the user) that its existing partition
+already had a valid, essentially-empty ext4 filesystem (only `lost+found`,
+2.1MB used of 938GB) — mounted as-is via its existing UUID rather than
+reformatted; only `/dev/sdb` needed partitioning + formatting. Both mounted
+persistently via `/etc/fstab` using `UUID=...` (not `/dev/sda`/`/dev/sdb`
+device names, which can shift across reboots) at `/mnt/sata1`/`/mnt/sata2`,
+registered as `sata1-disk`/`sata2-disk` in Longhorn's `node.longhorn.io`
+CR for `cm4-node-3`, and the eMMC default disk explicitly set to
+`allowScheduling: false` — kept OS-only, no longer eligible for replica data
+now that ~1.9TB of real storage exists. All of `21-cluster2-longhorn.yml`'s
+new tasks are idempotent (`community.general.parted`/`filesystem` no-op on an
+already-correct partition/filesystem, `ansible.posix.mount` no-ops on an
+already-correct fstab entry).
+
+**Caught and resolved: cross-cluster nfs-provisioner dependency.** The shared
+`longhorn` role's `main.yml` unconditionally installs an `nfs-provisioner`
+Helm release pointed at `nfs_server_ip`/`nfs_export_path` — both Cluster-1-only
+globals (rk1-worker-1's NFS export). Since `21-cluster2-longhorn.yml` reuses
+this same role, Cluster 2 would silently have gotten an `nfs-provisioner`
+release pointing cross-cluster at Cluster 1's NFS server. Fixed with the same
+conditional-var pattern as `createDefaultDiskLabeledNodes`: both NFS-provisioner
+tasks in the role gated behind `when: longhorn_install_nfs_provisioner |
+default(true)` (Cluster 1 never sets it, so it defaults `true` — unchanged
+behavior there), and `21-cluster2-longhorn.yml` sets
+`longhorn_install_nfs_provisioner: false`. Cluster 2 doesn't need NFS-backed
+storage — the two SATA disks on `cm4-node-3` above cover its storage need.
+
+**Not done this session** (explicitly out of scope): no observability
+workloads (Prometheus/Grafana/Loki) on Cluster 2 yet — storage-layer prep
+only. See roadmap item 5 below, which still tracks the CM4
+UFW/fail2ban/chrony hardening gap as a separate, still-open follow-up.
+
 ---
 
 ## Hardware — Cluster 1 (TuringPi 2.5)
@@ -878,8 +1021,16 @@ http://10.0.0.40/v1   LiteLLM        http://10.0.0.35       MinIO
    Alertmanager on the Jetson Nano (JetPack 4.6, already supported). Frees
    RK1 resources and isolates monitoring from the app cluster.
 
-5. **CM4 Cluster** (10.0.0.20-24, 3 nodes already flashed):
-   - Bootstrap K3s on the CM4 cluster.
+5. **CM4 Cluster** (10.0.0.21-24, all 4 nodes flashed and stable):
+   - ✅ **K3s bring-up implemented August 16, 2026** — forked
+     `k3s-server-cm4`/`k3s-agent-cm4` roles, isolated `cm4_nodes`/`cluster2`
+     inventory groups, playbooks `20-22-cluster2-*.yml`, Makefile targets
+     `cluster2-k3s`/`cluster2-longhorn`/`cluster2-metallb`. See the August 16,
+     2026 STATUS entry above for full details. **Code only — not yet run
+     against the live cluster.** Known gap: CM4 nodes have no UFW/fail2ban/
+     chrony hardening yet (only the swap-disable fix was forked in from
+     `common`); revisit if/when CM4 needs the same hardening posture as
+     Cluster 1.
    - Deploy `ntfy` to replace Gmail alerting.
    - Pi-hole for home DNS.
    - ✅ PostgreSQL for the LiteLLM UI is done (Cluster 1, July 26, 2026 —

@@ -1,0 +1,63 @@
+---
+- name: Install K3s server
+  ansible.builtin.shell: |
+    curl -sfL https://get.k3s.io | \
+      INSTALL_K3S_VERSION="{{ k3s_version_cluster2 }}" \
+      K3S_KUBECONFIG_MODE="644" \
+      sh -s - server \
+      --disable traefik \
+      --disable servicelb \
+      --node-ip={{ ansible_host }}
+  args:
+    creates: /usr/local/bin/k3s
+
+- name: Wait for node-token to exist
+  ansible.builtin.wait_for:
+    path: /var/lib/rancher/k3s/server/node-token
+    timeout: 120
+
+- name: Wait for control-plane node to register
+  ansible.builtin.command: k3s kubectl get node {{ inventory_hostname }}
+  register: k3s_node_registered
+  until: k3s_node_registered.rc == 0
+  retries: 24
+  delay: 5
+  changed_when: false
+
+- name: Ensure admin user's .kube directory exists
+  ansible.builtin.file:
+    path: "/home/{{ ansible_user }}/.kube"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0700"
+
+- name: Copy K3s kubeconfig to admin user's default kubectl/Helm location
+  ansible.builtin.copy:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: "/home/{{ ansible_user }}/.kube/config"
+    remote_src: true
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0600"
+
+- name: Fetch kubeconfig to workstation
+  ansible.builtin.fetch:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: ~/.kube/turingpi-cluster2.conf
+    flat: true
+  become: false
+
+- name: Point fetched kubeconfig at the real server IP
+  ansible.builtin.replace:
+    path: "{{ lookup('env', 'HOME') }}/.kube/turingpi-cluster2.conf"
+    regexp: 'https://127\.0\.0\.1:6443'
+    replace: "https://{{ ansible_host }}:6443"
+  become: false
+  delegate_to: localhost
+
+- name: Allow K3s API server port through UFW
+  community.general.ufw:
+    rule: allow
+    port: "6443"
+    proto: tcp

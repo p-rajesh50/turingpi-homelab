@@ -1,0 +1,139 @@
+---
+# ansible/playbooks/21-cluster2-longhorn.yml
+# Restricts Longhorn to cm4-node-3 only (2x1TB SATA + eMMC boot disk,
+# eMMC excluded from scheduling below) via Longhorn's own labeled-nodes
+# mechanism — node.longhorn.io/create-default-disk=true label + the
+# defaultSettings.createDefaultDiskLabeledNodes Helm value (set atomically at
+# chart-install time — see ansible/roles/longhorn/tasks/main.yml). No taints:
+# all 4 CM4 nodes stay schedulable for general workloads.
+
+- name: Label cm4-node-3 for Longhorn default-disk creation (Cluster 2)
+  hosts: cm4_control
+  become: false
+  environment:
+    KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+  tasks:
+    - name: Label cm4-node-3 with node.longhorn.io/create-default-disk=true
+      ansible.builtin.command: >
+        kubectl label node cm4-node-3 node.longhorn.io/create-default-disk=true --overwrite
+      changed_when: true
+
+- name: Install Longhorn (Cluster 2, cm4-node-3 only via label)
+  hosts: cm4_control
+  become: false
+  environment:
+    KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+  vars:
+    # The longhorn role's own tasks reference {{ admin_user }} directly for
+    # their KUBECONFIG path (not inherited from this play's environment:
+    # block), and admin_user resolves to "ubuntu" globally — wrong for cm4
+    # hosts (ansible_user: raj). Override it here so the reused role resolves
+    # the correct home directory.
+    admin_user: "{{ ansible_user }}"
+    longhorn_replica_count: "{{ longhorn_replica_count_cluster2 }}"
+    longhorn_storage_path: "{{ longhorn_storage_path_cluster2 }}"
+    longhorn_version: "{{ longhorn_version_cluster2 }}"
+    # Sets defaultSettings.createDefaultDiskLabeledNodes in the Helm chart
+    # values (see ansible/roles/longhorn/tasks/main.yml) — applied atomically
+    # at chart-render time, before any manager pod starts reconciling. A
+    # post-install `kubectl patch settings.longhorn.io` was tried first and
+    # lost the race against Longhorn's own default-disk auto-creation logic,
+    # which had already created a disk on every node by the time the patch
+    # landed (also under the wrong Setting name —
+    # create-default-disk-on-labeled-nodes doesn't exist in v1.6.2; the real
+    # one is create-default-disk-labeled-nodes / createDefaultDiskLabeledNodes).
+    longhorn_create_default_disk_labeled_nodes: "true"
+    # Cluster 2 has no NFS server of its own — nfs_server_ip/nfs_export_path
+    # are Cluster-1-only globals (rk1-worker-1's export). Skip the
+    # NFS-provisioner Helm release entirely rather than silently pointing
+    # Cluster 2 at Cluster 1's NFS server. Cluster 2's storage need is
+    # covered by the SATA disks on cm4-node-3 registered below.
+    longhorn_install_nfs_provisioner: false
+  roles:
+    - role: longhorn
+
+- name: Partition and format SATA SSDs on cm4-node-3
+  hosts: cm4-node-3
+  become: true
+  tasks:
+    - name: Create partition table + partition on sdb (no existing partition)
+      community.general.parted:
+        device: /dev/sdb
+        number: 1
+        state: present
+        fs_type: ext4
+        label: gpt
+
+    # sda1 already has a valid, empty ext4 filesystem (confirmed via `file -s`
+    # and a read-only mount showing only lost+found, 2.1MB used of 938GB) — no
+    # format task for it at all, mounted as-is via its existing UUID below.
+    - name: Format sdb1 as ext4
+      community.general.filesystem:
+        fstype: ext4
+        dev: /dev/sdb1
+
+    - name: Read UUID of sda1
+      ansible.builtin.command: blkid -s UUID -o value /dev/sda1
+      register: cm4_sata1_uuid
+      changed_when: false
+
+    - name: Read UUID of sdb1
+      ansible.builtin.command: blkid -s UUID -o value /dev/sdb1
+      register: cm4_sata2_uuid
+      changed_when: false
+
+    - name: Create mount points
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop: [/mnt/sata1, /mnt/sata2]
+
+    - name: Mount sda1 at /mnt/sata1 via UUID, persist to fstab
+      ansible.posix.mount:
+        path: /mnt/sata1
+        src: "UUID={{ cm4_sata1_uuid.stdout }}"
+        fstype: ext4
+        opts: defaults,noatime
+        state: mounted
+
+    - name: Mount sdb1 at /mnt/sata2 via UUID, persist to fstab
+      ansible.posix.mount:
+        path: /mnt/sata2
+        src: "UUID={{ cm4_sata2_uuid.stdout }}"
+        fstype: ext4
+        opts: defaults,noatime
+        state: mounted
+
+- name: Register SATA disks in Longhorn, disable eMMC scheduling (cm4-node-3)
+  hosts: cm4_control
+  become: false
+  environment:
+    KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+  tasks:
+    - name: Add sata1-disk to cm4-node-3
+      ansible.builtin.shell: |
+        kubectl -n longhorn-system patch node.longhorn.io cm4-node-3 \
+          --type=merge \
+          --patch='{"spec":{"disks":{"sata1-disk":{"path":"/mnt/sata1","allowScheduling":true,"storageReserved":0}}}}'
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: Add sata2-disk to cm4-node-3
+      ansible.builtin.shell: |
+        kubectl -n longhorn-system patch node.longhorn.io cm4-node-3 \
+          --type=merge \
+          --patch='{"spec":{"disks":{"sata2-disk":{"path":"/mnt/sata2","allowScheduling":true,"storageReserved":0}}}}'
+      args:
+        executable: /bin/bash
+      changed_when: true
+
+    - name: Disable scheduling on the eMMC default disk (OS-only, not storage)
+      ansible.builtin.shell: |
+        kubectl -n longhorn-system patch node.longhorn.io cm4-node-3 \
+          --type=merge \
+          --patch='{"spec":{"disks":{"{{ longhorn_cm4_emmc_disk_name }}":{"path":"/var/lib/longhorn","allowScheduling":false,"evictionRequested":true,"storageReserved":0}}}}'
+      args:
+        executable: /bin/bash
+      changed_when: true

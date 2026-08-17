@@ -1,0 +1,143 @@
+---
+# ansible/playbooks/20-cluster2-kubernetes.yml
+# Deploys a 4-node K3s cluster on the CM4 nodes (Cluster 2), single
+# control-plane on cm4-node-1 (K3s default SQLite datastore), default Flannel
+# CNI — no separate CNI playbook needed, unlike Cluster 1's Cilium install.
+# Fully isolated from Cluster 1: forked k3s-server-cm4/k3s-agent-cm4 roles,
+# separate cm4_nodes/cm4_control/cm4_workers inventory groups, separate
+# ~/.kube/turingpi-cluster2.conf kubeconfig.
+
+# ── Phase 1: OS prep on all CM4 nodes ────────────────────────────────────────
+- name: Kubernetes OS prerequisites (Cluster 2)
+  hosts: cm4_nodes
+  become: true
+  tags: [k8s-prep]
+
+  tasks:
+    - name: Load kernel modules
+      community.general.modprobe:
+        name: "{{ item }}"
+        state: present
+      loop: [overlay, br_netfilter]
+
+    - name: Persist kernel modules
+      ansible.builtin.copy:
+        dest: /etc/modules-load.d/k8s.conf
+        content: "overlay\nbr_netfilter\n"
+        mode: "0644"
+
+    - name: Set sysctl params for Kubernetes
+      ansible.posix.sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        sysctl_file: /etc/sysctl.d/99-k8s.conf
+        reload: true
+      loop:
+        - { key: "net.bridge.bridge-nf-call-iptables",  value: "1" }
+        - { key: "net.bridge.bridge-nf-call-ip6tables", value: "1" }
+        - { key: "net.ipv4.ip_forward",                 value: "1" }
+
+    - name: Install Helm
+      ansible.builtin.shell: |
+        curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+      args:
+        creates: /usr/local/bin/helm
+
+    # Longhorn requires iscsiadm on the host for its iSCSI-backed volume
+    # attachment — without this, longhorn-manager crash-loops with "Failed
+    # environment check... iscsiadm not found". cm4_nodes don't run the full
+    # common role, so this is forked in here.
+    - name: Install open-iscsi (Longhorn requires iscsiadm on the host)
+      ansible.builtin.apt:
+        name: open-iscsi
+        state: present
+        update_cache: true
+
+    - name: Enable and start iscsid
+      ansible.builtin.systemd:
+        name: iscsid
+        enabled: true
+        state: started
+
+    # k3s-server-cm4's "Allow K3s API server port through UFW" task fails
+    # outright if ufw isn't installed — cm4_nodes don't run the full common
+    # role (which normally installs it), so it's forked in here.
+    - name: Install ufw (required by k3s-server-cm4's UFW task)
+      ansible.builtin.apt:
+        name: ufw
+        state: present
+
+    # CM4/CM5 nodes need cgroup_memory=1 cgroup_enable=memory on the kernel
+    # cmdline or k3s fails to start with "failed to find memory cgroup (v2)".
+    # Idempotent: only appends and reboots if not already present.
+    - name: Read current /boot/firmware/cmdline.txt
+      ansible.builtin.slurp:
+        src: /boot/firmware/cmdline.txt
+      register: cm4_cmdline_raw
+
+    - name: Append cgroup_memory=1 cgroup_enable=memory if missing
+      ansible.builtin.copy:
+        dest: /boot/firmware/cmdline.txt
+        content: "{{ (cm4_cmdline_raw.content | b64decode | trim) + ' cgroup_memory=1 cgroup_enable=memory' }}\n"
+      when: >-
+        'cgroup_memory=1' not in (cm4_cmdline_raw.content | b64decode) or
+        'cgroup_enable=memory' not in (cm4_cmdline_raw.content | b64decode)
+      register: cm4_cmdline_result
+
+    - name: Reboot node if cmdline.txt changed
+      ansible.builtin.reboot:
+        reboot_timeout: 180
+      when: cm4_cmdline_result.changed
+
+    # Forked from ansible/roles/common/tasks/main.yml's "Disable swap
+    # permanently via systemd" task — Cluster 1 hit a documented incident
+    # where Ubuntu silently re-enabling swap on reboot crashed kubelet.
+    # cm4_nodes don't run the full common role (that's Cluster-1-scoped), so
+    # this specific sub-fix is forked here rather than left as a gap. NOTE:
+    # this is the swap-disable fix only — UFW/fail2ban/chrony/other
+    # common-role hardening is NOT applied to cm4_nodes; see SESSION-HANDOFF.md
+    # for this flagged as a follow-up.
+    - name: Disable swap permanently via systemd (runs before kubelet on every boot)
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/disable-swap.service
+        content: |
+          [Unit]
+          Description=Disable swap permanently for Kubernetes
+          DefaultDependencies=no
+          Before=k3s.service k3s-agent.service
+          After=local-fs.target
+
+          [Service]
+          Type=oneshot
+          ExecStart=/sbin/swapoff -a
+          ExecStartPost=/bin/bash -c 'rm -f /swapfile /swap.img; sed -i "/swapfile/d;/swap.img/d;/\sswap\s/d" /etc/fstab'
+          RemainAfterExit=yes
+
+          [Install]
+          WantedBy=multi-user.target
+        mode: "0644"
+      register: cluster2_swap_unit
+
+    - name: Reload and enable disable-swap unit
+      ansible.builtin.systemd:
+        name: disable-swap
+        daemon_reload: true
+        enabled: true
+        state: started
+      when: cluster2_swap_unit.changed
+
+# ── Phase 2: K3s server ───────────────────────────────────────────────────────
+- name: Initialize K3s server (Cluster 2)
+  hosts: cm4_control
+  become: true
+  tags: [k3s-server-cm4]
+  roles:
+    - role: k3s-server-cm4
+
+# ── Phase 3: K3s agents join ──────────────────────────────────────────────────
+- name: Join K3s agents (Cluster 2)
+  hosts: cm4_workers
+  become: true
+  tags: [k3s-agents-cm4]
+  roles:
+    - role: k3s-agent-cm4

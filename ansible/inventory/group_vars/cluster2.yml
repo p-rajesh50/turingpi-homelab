@@ -1,0 +1,9 @@
+---
+# ansible/inventory/group_vars/cluster2.yml
+# Cluster 2 (CM4) specific overrides — isolated from Cluster 1's group_vars/all/vars.yml.
+k3s_version_cluster2: "v1.30.5+k3s1"      # matches Cluster 1's pinned version today
+k3s_server_ip_cluster2: "10.0.0.21"       # cm4-node-1
+longhorn_replica_count_cluster2: 1        # only cm4-node-3 runs Longhorn — no replication target
+longhorn_storage_path_cluster2: "/var/lib/longhorn"
+longhorn_version_cluster2: "1.6.2"        # matches Cluster 1's pinned version today
+longhorn_cm4_emmc_disk_name: "default-disk-3031f08ccc92ad69"   # cm4-node-3's auto-created eMMC default disk — excluded from scheduling

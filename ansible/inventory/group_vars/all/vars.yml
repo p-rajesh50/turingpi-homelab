@@ -36,7 +36,7 @@ service_cidr: "10.96.0.0/12"
 
 # MetalLB LoadBalancer IP pools
 metallb_ip_range_cluster1: "10.0.0.30-10.0.0.49"
-metallb_ip_range_cluster2: "10.0.0.50-10.0.0.69"   # future
+metallb_ip_range_cluster2: "10.0.0.60-10.0.0.69"   # shrunk from .50 — that IP is now the Orin Nano's static address
 
 # ── SSH ───────────────────────────────────────────────────────────────────────
 ssh_public_key_path: "~/.ssh/turingpi_homelab.pub"

@@ -21,6 +21,9 @@
         storageMinimalAvailablePercentage: 10
         storageReservedPercentageForDefaultDisk: 5
         nodeDownPodDeletionPolicy: delete-both-statefulset-and-deployment-pod
+      {% if longhorn_create_default_disk_labeled_nodes is defined %}
+        createDefaultDiskLabeledNodes: {{ longhorn_create_default_disk_labeled_nodes }}
+      {% endif %}
       persistence:
         defaultClass: true
         defaultClassReplicaCount: {{ longhorn_replica_count }}
@@ -47,6 +50,7 @@
   changed_when: true
   environment:
     KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  when: longhorn_install_nfs_provisioner | default(true)
 
 - name: Install NFS StorageClass provisioner
   ansible.builtin.command: >
@@ -58,6 +62,7 @@
     --set storageClass.name=nfs-shared
     --set storageClass.defaultClass=false
     --wait
+  when: longhorn_install_nfs_provisioner | default(true)
   environment:
     KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
   changed_when: true

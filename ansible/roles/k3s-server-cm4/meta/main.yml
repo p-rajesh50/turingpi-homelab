@@ -1,0 +1,4 @@
+---
+galaxy_info:
+  role_name: k3s_server_cm4
+dependencies: []

@@ -1,0 +1,50 @@
+---
+# ansible/playbooks/22-cluster2-metallb.yml
+# Installs MetalLB on Cluster 2 with its own IP pool (10.0.0.60-10.0.0.69),
+# separate from Cluster 1's pool (10.0.0.30-10.0.0.49). No Ingress-NGINX or
+# other add-ons on Cluster 2 yet — direct LoadBalancer IPs only.
+
+- name: Install MetalLB (Cluster 2)
+  hosts: cm4_control
+  become: false
+  environment:
+    KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+  tasks:
+    - name: Add MetalLB Helm repo
+      ansible.builtin.command: helm repo add metallb https://metallb.github.io/metallb
+      changed_when: true
+
+    - name: Update Helm repos
+      ansible.builtin.command: helm repo update
+      changed_when: true
+
+    - name: Install MetalLB
+      ansible.builtin.command: >
+        helm upgrade --install metallb metallb/metallb
+        --namespace metallb-system --create-namespace --wait
+      changed_when: true
+
+    - name: Configure MetalLB IP pool
+      ansible.builtin.copy:
+        dest: /tmp/metallb-pool-cluster2.yml
+        content: |
+          ---
+          apiVersion: metallb.io/v1beta1
+          kind: IPAddressPool
+          metadata:
+            name: cluster2-pool
+            namespace: metallb-system
+          spec:
+            addresses:
+              - {{ metallb_ip_range_cluster2 }}
+          ---
+          apiVersion: metallb.io/v1beta1
+          kind: L2Advertisement
+          metadata:
+            name: cluster2-l2
+            namespace: metallb-system
+        mode: "0644"
+
+    - name: Apply MetalLB pool
+      ansible.builtin.command: kubectl apply -f /tmp/metallb-pool-cluster2.yml
+      changed_when: true

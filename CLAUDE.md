@@ -412,6 +412,17 @@ Check `rpc-statd` is enabled (not just running) on all 3 RK1 nodes:
 rpcbind, so NFSv3 lock registration fails inside the pod regardless of host
 state. Full incident writeup: `SESSION-HANDOFF.md`, "August 16, 2026" entry.
 
+### cloudflared CrashLoopBackOff
+Root cause is almost always QUIC/UDP failing on that pod/node's network path
+(`kubectl logs -n cloudflare-tunnel <pod>` shows `UDP Connectivity FAIL` /
+`QUIC connection failed` while `TCP Connectivity PASS`), racing against the
+`livenessProbe`'s ~40s grace window (`/ready` on port 2000) — cloudflared gets
+killed before it falls through to its own HTTP2 fallback. **Not a
+probe-tuning issue** — fix is `protocol: http2` in cloudflared's
+`config.yaml` (`ansible/roles/cloudflare-tunnel/tasks/main.yml`), which skips
+QUIC negotiation entirely. Full incident writeup: `SESSION-HANDOFF.md`,
+"August 22, 2026" entry.
+
 ---
 
 ## Current State Summary

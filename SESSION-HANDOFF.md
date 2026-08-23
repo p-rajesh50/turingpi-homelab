@@ -735,6 +735,65 @@ automated).
 
 ---
 
+**August 22, 2026 — cloudflared CrashLoopBackOff on rk1-control fixed
+(QUIC/UDP failure, not a probe-tuning issue):**
+
+Flagged as a pre-existing, unrelated issue during the August 17 rk1-control
+NVMe migration (787+ restarts at the time) — investigated and fixed as its
+own task. Root cause, confirmed via logs on the crashing pod:
+
+- cloudflared's own startup connectivity precheck found QUIC/UDP broken on
+  this pod/node's network path — `UDP Connectivity FAIL` ("QUIC connection
+  failed" / "handshake did not complete in time") against both Cloudflare
+  edge regions, while `TCP Connectivity PASS` (HTTP/2) succeeded cleanly. A
+  supporting log line pointed at a Linux UDP receive-buffer ceiling quic-go
+  needs (`wanted: 7168 kiB, got: 416 kiB`) as the likely proximate cause,
+  though the exact reason this pod/node fails QUIC while the other replica
+  (on `rk1-worker-1`) doesn't was not root-caused further than that.
+- The precheck itself says "Environment ready with degraded transport.
+  cloudflared will proceed using 'http2'" — but only *after* it's already
+  spent time retrying QUIC handshakes with exponential backoff against a
+  rotating list of edge IPs. The Deployment's `livenessProbe` (`/ready` on
+  port 2000, `initialDelaySeconds: 10`, Kubernetes' unspecified defaults for
+  `periodSeconds`/`failureThreshold` — ~40s total grace, not the 60s
+  originally assumed) killed the container before it ever fell through to
+  HTTP2. **This was a protocol-selection problem, not a probe-tuning
+  problem** — do not mistake this for something fixable by loosening the
+  liveness probe; that would just prolong the outage window without fixing
+  the actual cause.
+- Fix: added `protocol: http2` as a top-level key to cloudflared's
+  `config.yaml` (embedded ConfigMap content in
+  `ansible/roles/cloudflare-tunnel/tasks/main.yml`), a documented cloudflared
+  config key (values: `auto`/`http2`/`quic`) confirmed against [Cloudflare's
+  Tunnel run-parameters
+  docs](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/run-parameters/)
+  before applying. This skips QUIC negotiation entirely instead of racing it
+  against the liveness probe.
+- Applied live: re-ran the `cloudflare-tunnel` role, `kubectl rollout
+  restart deployment cloudflared`. Logs post-restart show `Initial protocol
+  http2` and all 4 tunnel connections registering on `protocol=http2` within
+  3 seconds — the async precheck still runs afterward and still reports the
+  same QUIC/UDP failure (unrelated network condition, unfixed and not
+  necessary to fix), but no longer blocks startup since HTTP2 was already
+  selected up front. Both replicas held `1/1 Running`, 0 restarts, for 5+
+  minutes of observation; confirmed `https://vault.kloud-worx.com` still
+  routes through the tunnel (302 to Access login) after the restart.
+- **Sysctl recommendation (not implemented)**: raising
+  `net.core.rmem_max`/`wmem_max` on `rk1-control` might let QUIC work again
+  later, but was declined for now — HTTP2 is fully functional for Cloudflare
+  Tunnel (QUIC's only advantage is latency, not correctness), and there's no
+  confirmation yet that the buffer size is the only blocker (a NAT/firewall
+  UDP restriction is equally plausible). Flagged as an optional future
+  follow-up, not bundled into this fix.
+- **Separately noted, not fixed**: cloudflared's config also sets
+  `credentials-file: /etc/cloudflared/creds/credentials.json`, but the
+  Deployment has no volumeMount for that path — only `/etc/cloudflared/config`
+  is mounted, and auth actually happens via the `TUNNEL_TOKEN` env var. This
+  line appears to be dead/unused config; left as-is since it's unrelated to
+  this crash.
+
+---
+
 ## Hardware — Cluster 1 (TuringPi 2.5)
 
 | Device | Hostname | IP | Slot | Status |

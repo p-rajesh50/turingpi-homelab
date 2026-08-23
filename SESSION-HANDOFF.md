@@ -966,6 +966,35 @@ separate dry-run-only Job manifest, before creating it.
 intact, blob storage reclaimed immediately via the forced GC trigger,
 CronJob scheduled (`0 3 * * *`, not suspended) for ongoing retention.
 
+**Same-day follow-up — token scope narrowed, admin token deleted**: the
+one-time backlog cleanup needed a token scoped
+`read:package,write:package,admin` (the `admin` scope only for the single
+forced-GC call above). Once that one-time work was done, split the token
+design in two:
+- Created a new PAT scoped **`read:package,write:package` only** (no
+  `admin`) and rotated it into `secret/gitea-package-cleanup` in Vault
+  (`vault kv put`, overwrote the prior admin-scoped value — Vault secret
+  version 2). This is the token the recurring CronJob uses going forward;
+  its actual job (list + delete old versions) never needed `admin`.
+- **Deleted the `gitea-cr-admin` PAT from Gitea entirely** — confirmed
+  actually revoked, not just removed from the UI list, by testing the exact
+  old token string against `GET /api/v1/user` after deletion: returned
+  `401`. No admin-scoped token persists anywhere going forward.
+- Forced the `gitea-package-cleanup-token` ExternalSecret to pick up the
+  rotated value immediately (`kubectl annotate ... force-sync=<ts>
+  --overwrite`, ESO's manual-resync trigger) rather than waiting up to its
+  1h `refreshInterval` — confirmed the K8s Secret's decoded value matched
+  the new narrow token right after.
+- Verified the narrow token works correctly under its reduced scope: a
+  dry-run job (`DRY_RUN=true`, this time explicitly overridden via
+  JSON-patch on the exported CronJob manifest **before** `kubectl apply` —
+  learned from the earlier `--from=cronjob` mistake, see above) completed
+  cleanly with a correct no-op ("Total versions: 10, keeping newest 10" for
+  both packages, nothing to delete since the backlog cleanup already ran) —
+  proving list+would-delete works without a 403. Separately confirmed
+  `GET /api/v1/admin/cron` with the narrow token returns `403` (no admin
+  scope, as intended).
+
 ---
 
 ## Hardware — Cluster 1 (TuringPi 2.5)

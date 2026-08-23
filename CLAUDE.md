@@ -458,7 +458,15 @@ currently-deployed image; this isn't automated. Script:
 via the API doesn't free disk immediately — Gitea's built-in
 `cleanup_packages` cron task (`@midnight`, 24h grace) sweeps orphaned blobs
 automatically; to force it on demand: `POST /api/v1/admin/cron/cleanup_packages`
-(needs an `admin`-scoped token). Full incident writeup: `SESSION-HANDOFF.md`,
+(needs an `admin`-scoped token — temporary/one-off use only, see below).
+**Token in Vault (`secret/gitea-package-cleanup`, key `TOKEN`) is scoped
+`read:package,write:package` only** — no `admin` — since the CronJob's
+actual job (list + delete versions) never needs it. The one-time backlog
+cleanup temporarily used an admin-scoped token for the forced-GC call above;
+that token was deleted from Gitea entirely once the one-time work was done
+(confirmed revoked: retesting the old token string returned `401`) — no
+admin-scoped token persists anywhere for this job. Full incident writeup:
+`SESSION-HANDOFF.md`,
 "August 23, 2026" entry (includes a process-mistake note on safely dry-running
 a CronJob via `kubectl create job --from=cronjob` — override risky env vars
 explicitly, its template's live-action defaults get copied verbatim).

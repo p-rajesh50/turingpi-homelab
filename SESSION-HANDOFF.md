@@ -794,6 +794,76 @@ own task. Root cause, confirmed via logs on the crashing pod:
 
 ---
 
+**August 23, 2026 — Prometheus disk-full CrashLoopBackOff fixed (retention
+config, not just storage expansion):**
+
+`prometheus-monitoring-kube-prometheus-prometheus-0` had been
+`CrashLoopBackOff` for 11 days (3204+ restarts). Confirmed via
+`kubectl logs --previous`: `write /prometheus/queries.active: no space left
+on device` — the 20Gi Longhorn-backed PVC was completely full, so Prometheus
+couldn't even start (never got far enough to run its own TSDB retention
+sweep).
+
+- **Root cause**: `kubernetes/helm-values/prometheus-stack.yml` set
+  `retention: 15d` with **no `retentionSize`** — a purely time-based cap
+  with no size-based backstop. Nothing stopped ingestion from overshooting
+  the 20Gi volume before the 15-day window could naturally cycle out old
+  blocks. This is a configuration gap, not a one-off fluke — expanding the
+  PVC alone would only have delayed the same failure recurring.
+- **Fix**: changed `retention: 15d` → `7d` and added `retentionSize: "15GB"`
+  as an explicit hard cap on the same 20Gi PVC (~25% headroom for WAL/
+  compaction overhead). Verified `"15GB"` against the format both the
+  Prometheus Operator's live CRD schema
+  (`kubectl get crd prometheuses.monitoring.coreos.com` →
+  `spec.retentionSize.pattern: (^0|([0-9]*[.])?[0-9]+((K|M|G|T|E|P)i?)?B)$`)
+  and Prometheus's own `--storage.tsdb.retention.size` flag docs require,
+  before applying — same diligence as the earlier Longhorn Helm-key
+  verification.
+- **PVC wipe**: since Prometheus couldn't start at all under the full old
+  data (monitoring/metrics only, not app state, and this instance is being
+  migrated to Cluster 2 soon anyway — data loss accepted), the fix required
+  scaling down and deleting the PVC for a clean restart. **Scaling the
+  `StatefulSet` to 0 alone did not work** — the Prometheus Operator
+  reconciles the StatefulSet's replica count from the `Prometheus` CR and
+  silently restored it to 1, remounting the PVC before it could delete.
+  The correct approach: `kubectl patch prometheus
+  monitoring-kube-prometheus-prometheus --type=merge -p
+  '{"spec":{"replicas":0}}'` (patching the **CR**, not the StatefulSet)
+  actually stops the pod for good; then `kubectl delete pvc ...` completes
+  cleanly (StatefulSet's `volumeClaimTemplate` recreates a fresh PVC
+  automatically once replicas is patched back to 1 — no manual PV/Longhorn
+  volume manipulation needed).
+- **Hit the same known Longhorn eMMC/`/var/log/instances` bug again**, this
+  time on a brand-new replica scheduled to `rk1-control`'s `nvme-disk`
+  (first replica placed there since the August 17 eviction): `failed to
+  create instance: ... open
+  /var/log/instances/<name>.log: no such file or directory`, retried every
+  30s and never self-resolved this time (unlike the August 17 migration,
+  where it didn't recur). Root cause this time was a **stale mount inside
+  the `instance-manager` pod itself** — the host directory
+  `/var/log/instances` existed fine (confirmed via `stat` on `rk1-control`),
+  but the long-running (11-day-old) instance-manager pod's view of it was
+  stale. Fix: `kubectl delete pod -n longhorn-system
+  instance-manager-<id-on-rk1-control>` — Longhorn recreated it immediately
+  with the same name, and the replica started successfully on retry within
+  seconds. This is a lightweight component-manager pod restart, not a data
+  operation — safe, and worth trying first before assuming a deeper bug any
+  time this exact error recurs.
+- **Verified**: pod `2/2 Running`, 0 restarts across 11+ minutes of
+  observation; fresh Longhorn volume `actualSize` ~396MB (vs. the old
+  20Gi-full volume); `/api/v1/status/flags` confirms both
+  `storage.tsdb.retention.time=1w` and `storage.tsdb.retention.size=15GiB`
+  applied (Prometheus normalizes the `GB` input to `GiB` for display since
+  both are power-of-2-based units — same numeric value); Prometheus actively
+  scraping targets again (`up` query returns fresh results).
+
+**Forward-looking note for the Cluster 2 observability rebuild**: when
+kube-prometheus-stack is deployed on Cluster 2, carry `retentionSize`
+forward from day one alongside `retention` — do not reintroduce a
+size-uncapped default there.
+
+---
+
 ## Hardware — Cluster 1 (TuringPi 2.5)
 
 | Device | Hostname | IP | Slot | Status |

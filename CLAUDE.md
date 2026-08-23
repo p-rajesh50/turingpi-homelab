@@ -423,6 +423,24 @@ probe-tuning issue** — fix is `protocol: http2` in cloudflared's
 QUIC negotiation entirely. Full incident writeup: `SESSION-HANDOFF.md`,
 "August 22, 2026" entry.
 
+### Prometheus disk-full CrashLoopBackOff
+Check for `no space left on device` in `kubectl logs --previous`. Root cause
+is a missing size-based retention backstop — `retention: <time>` alone lets
+ingestion overshoot the PVC before the time window naturally cycles data
+out. Fix is `retentionSize` (e.g. `"15GB"` on a 20Gi PVC, ~25% headroom) in
+`kubernetes/helm-values/prometheus-stack.yml`'s `prometheus.prometheusSpec`
+block — **always pair `retention` with `retentionSize`**, never one alone.
+To wipe a full PVC for a clean restart: patch the **`Prometheus` CR**'s
+`spec.replicas` to `0` (not `kubectl scale statefulset` — the operator
+reconciles the StatefulSet from the CR and will silently restore it), then
+`kubectl delete pvc`; patch `replicas` back to `1` to let the
+`volumeClaimTemplate` recreate a fresh PVC. If a replica then fails to start
+on `rk1-control` with `open /var/log/instances/<name>.log: no such file or
+directory` (a recurring Longhorn quirk on that node, see the eMMC-migration
+entry below), try restarting the `instance-manager` pod on that node first —
+often a stale mount, not a missing directory. Full incident writeup:
+`SESSION-HANDOFF.md`, "August 23, 2026" entry.
+
 ---
 
 ## Current State Summary

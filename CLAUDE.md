@@ -441,6 +441,28 @@ entry below), try restarting the `instance-manager` pod on that node first —
 often a stale mount, not a missing directory. Full incident writeup:
 `SESSION-HANDOFF.md`, "August 23, 2026" entry.
 
+### Gitea package-registry retention (research-forum-app, rf-pre-event-app)
+Enforced by a CronJob (`gitea-package-cleanup`, namespace `gitea`, daily
+`0 3 * * *`), not native Gitea cleanup rules — this Gitea version (1.27.0)
+has no cleanup-rules REST API at all, and the UI-only feature is documented
+upstream as unreliable for container-type packages specifically. Policy:
+keep newest 10 versions per package, plus a hardcoded live-tag exclusion.
+**To change retention count or the live-tag allowlist**: edit
+`gitea_package_keep_count` / `gitea_package_live_tags` in
+`ansible/inventory/group_vars/all/vars.yml`, then re-run
+`ansible-playbook ansible/playbooks/06-dev-tools.yml`. `gitea_package_live_tags`
+is a static list — **it must be updated by hand whenever either app's live
+deployed tag changes**, or a future cleanup run could delete the
+currently-deployed image; this isn't automated. Script:
+`ansible/roles/gitea/files/package-cleanup.sh`. Deleting a package version
+via the API doesn't free disk immediately — Gitea's built-in
+`cleanup_packages` cron task (`@midnight`, 24h grace) sweeps orphaned blobs
+automatically; to force it on demand: `POST /api/v1/admin/cron/cleanup_packages`
+(needs an `admin`-scoped token). Full incident writeup: `SESSION-HANDOFF.md`,
+"August 23, 2026" entry (includes a process-mistake note on safely dry-running
+a CronJob via `kubectl create job --from=cronjob` — override risky env vars
+explicitly, its template's live-action defaults get copied verbatim).
+
 ---
 
 ## Current State Summary

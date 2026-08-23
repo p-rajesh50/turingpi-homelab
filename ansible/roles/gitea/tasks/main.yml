@@ -205,6 +205,126 @@
   environment:
     KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
 
+- name: Create gitea-package-cleanup-token ExternalSecret
+  ansible.builtin.copy:
+    dest: /tmp/gitea-package-cleanup-secret.yml
+    mode: "0644"
+    content: |
+      ---
+      apiVersion: external-secrets.io/v1
+      kind: ExternalSecret
+      metadata:
+        name: gitea-package-cleanup-token
+        namespace: gitea
+      spec:
+        refreshInterval: 1h
+        secretStoreRef:
+          name: vault-backend
+          kind: ClusterSecretStore
+        target:
+          name: gitea-package-cleanup-token
+          creationPolicy: Owner
+        data:
+          - secretKey: token
+            remoteRef:
+              key: secret/gitea-package-cleanup
+              property: TOKEN
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+- name: Apply gitea-package-cleanup-token ExternalSecret
+  ansible.builtin.command: kubectl apply -f /tmp/gitea-package-cleanup-secret.yml
+  changed_when: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+# Retention policy: keep newest {{ gitea_package_keep_count }} versions per
+# package, always excluding the live tags in gitea_package_live_tags
+# regardless of age. See SESSION-HANDOFF.md for why this is a script (no
+# native cleanup-rules API in this Gitea version, and container-type
+# cleanup rules are documented upstream as unreliable where the UI feature
+# does exist). To change retention count or the live-tag allowlist, edit
+# gitea_package_keep_count / gitea_package_live_tags in
+# ansible/inventory/group_vars/all/vars.yml and re-run this role.
+- name: Create gitea-package-cleanup script ConfigMap
+  ansible.builtin.copy:
+    dest: /tmp/gitea-package-cleanup-configmap.yml
+    mode: "0644"
+    content: |
+      ---
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: gitea-package-cleanup-script
+        namespace: gitea
+      data:
+        package-cleanup.sh: |
+          {{ lookup('ansible.builtin.file', 'package-cleanup.sh') | indent(10) }}
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+- name: Apply gitea-package-cleanup script ConfigMap
+  ansible.builtin.command: kubectl apply -f /tmp/gitea-package-cleanup-configmap.yml
+  changed_when: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+- name: Create gitea-package-cleanup CronJob
+  ansible.builtin.copy:
+    dest: /tmp/gitea-package-cleanup-cronjob.yml
+    mode: "0644"
+    content: |
+      ---
+      apiVersion: batch/v1
+      kind: CronJob
+      metadata:
+        name: gitea-package-cleanup
+        namespace: gitea
+      spec:
+        schedule: "0 3 * * *"
+        concurrencyPolicy: Forbid
+        jobTemplate:
+          spec:
+            template:
+              spec:
+                restartPolicy: OnFailure
+                containers:
+                  - name: package-cleanup
+                    image: alpine:3.20
+                    command: ["/bin/sh", "-c"]
+                    args:
+                      - apk add --no-cache curl jq >/dev/null && /scripts/package-cleanup.sh
+                    env:
+                      - name: GITEA_URL
+                        value: "http://gitea-http.gitea.svc.cluster.local:3000"
+                      - name: GITEA_TOKEN
+                        valueFrom:
+                          secretKeyRef:
+                            name: gitea-package-cleanup-token
+                            key: token
+                      - name: KEEP_COUNT
+                        value: "{{ gitea_package_keep_count }}"
+                      - name: LIVE_TAGS
+                        value: "{{ gitea_package_live_tags }}"
+                      - name: DRY_RUN
+                        value: "false"
+                    volumeMounts:
+                      - name: script
+                        mountPath: /scripts
+                volumes:
+                  - name: script
+                    configMap:
+                      name: gitea-package-cleanup-script
+                      defaultMode: 0755
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+- name: Apply gitea-package-cleanup CronJob
+  ansible.builtin.command: kubectl apply -f /tmp/gitea-package-cleanup-cronjob.yml
+  changed_when: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
 - name: Print Gitea summary
   ansible.builtin.debug:
     msg:

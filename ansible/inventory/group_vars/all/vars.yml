@@ -116,6 +116,16 @@ gitea_version: "1.21.0"
 gitea_storage_size: "20Gi"
 gitea_service_ip: "10.0.0.36"       # from MetalLB pool
 
+# Gitea package-registry retention (research-forum-app, rf-pre-event-app
+# container images). Enforced by ansible/roles/gitea/files/package-cleanup.sh
+# via a CronJob — no native cleanup-rules API exists in the running Gitea
+# version (confirmed 1.27.0 live), see SESSION-HANDOFF.md for the
+# investigation. gitea_package_live_tags MUST be updated whenever either
+# app's live deployed tag changes — it is a hardcoded allowlist, not derived
+# from the cluster's actual running state.
+gitea_package_keep_count: "10"
+gitea_package_live_tags: "research-forum-app:fd0312b9b2de3896fbbf9069a59dfe9be5bda004 rf-pre-event-app:d74ca3a12c8ff4ced8a1d797e03ff9b125108d40"
+
 # Postgres
 postgres_version: "16"
 postgres_storage_size: "5Gi"       # Longhorn PVC

@@ -868,6 +868,106 @@ size-uncapped default there.
 
 ---
 
+**August 23, 2026 — Gitea package-registry retention policy added
+(research-forum-app, rf-pre-event-app):**
+
+Every `workflow_dispatch` deploy pushed a new `gitea.sha`-tagged container
+image with nothing ever pruning old versions — 102 versions of
+`research-forum-app`, 108 of `rf-pre-event-app` had accumulated.
+
+**Investigation (confirmed live, not assumed from version number)**:
+- Live Gitea version is **1.27.0** (`GET /api/v1/version`) — the repo's
+  `gitea_version: "1.21.0"` var in `ansible/inventory/group_vars/all/vars.yml`
+  is stale/unused (the Helm install has no `--version` flag), a pre-existing
+  drift bug, flagged but not fixed as part of this task.
+- **No cleanup-rules REST API exists in this version** — confirmed by
+  pulling the live instance's own `/swagger.v1.json` and enumerating every
+  `/packages/...` path; only list/get/delete-by-version endpoints exist, no
+  `cleanup-rules` path. Gitea's cleanup-rules feature (where present) is
+  UI-only, can't be managed idempotently via Ansible.
+- Even where the UI feature exists, **container-type cleanup rules are
+  documented upstream as unreliable** (go-gitea/gitea issues #32349, #21673,
+  #20514, #33552 — rules not firing / not actually deleting for `container`
+  packages specifically).
+- **Decision: script-based enforcement (not native rules)** — no API to
+  configure natively in this version anyway, documented unreliability for
+  container packages, and native rules structurally can't express a
+  live-tag exclusion the way an explicit allowlist can.
+
+**Implementation**:
+- New `ansible/roles/gitea/files/package-cleanup.sh` — lists all versions
+  per package (paginated), sorts strictly via `jq -s sort_by(.created_at)`
+  (a naive text `sort` on ISO-8601 timestamps can silently misorder without
+  erroring, so no fallback path is used, just the one correct sort), keeps
+  the newest `KEEP_COUNT` plus anything listed in `LIVE_TAGS` regardless of
+  age, deletes the rest via `DELETE /api/v1/packages/{owner}/container/{name}/{version}`.
+- New Vault secret `secret/gitea-package-cleanup` (key `TOKEN`) — a
+  dedicated PAT for `gitea_admin` scoped `read:package`, `write:package`,
+  and `admin` (the `admin` scope is needed for the forced-GC step below, not
+  package operations themselves). Synced to K8s via a new ExternalSecret
+  `gitea-package-cleanup-token` (namespace `gitea`), same pattern as the
+  existing `gitea-admin-credentials` secret.
+- New CronJob `gitea-package-cleanup` (namespace `gitea`), schedule
+  `0 3 * * *`, `concurrencyPolicy: Forbid`, `alpine:3.20` + `apk add curl
+  jq`, script mounted from a new ConfigMap `gitea-package-cleanup-script`.
+- **Retention policy**: keep newest **10** versions per package, plus a
+  hardcoded live-tag exclusion. Both the count and the exclusion list are
+  plain vars — `gitea_package_keep_count` and `gitea_package_live_tags` in
+  `ansible/inventory/group_vars/all/vars.yml` — edit there and re-run
+  `ansible-playbook ansible/playbooks/06-dev-tools.yml` to change either.
+- **Known follow-up risk**: `gitea_package_live_tags` is a static allowlist,
+  not derived from the cluster's actual running Deployments — it must be
+  updated by hand whenever either app's live tag changes, or a future
+  cleanup run could delete the currently-deployed image. Not automated yet
+  (would need extra kubectl RBAC on the cleanup job to read Deployment specs
+  live).
+
+**Blob storage reclaim (confirmed via Gitea 1.27.0 source, not assumed)**:
+deleting a package version only removes the version record/blob
+references — it does not free disk immediately. Gitea has a built-in cron
+task `cleanup_packages` (`services/cron/tasks_basic.go`,
+`registerCleanupPackages()`) — `Enabled: true`, `@midnight`, `OlderThan:
+24h` — unmodified defaults, confirmed present and running on the live
+instance (`GET /api/v1/admin/cron` lists it, `prev`/`next`/`exec_times`
+populated). No extra config needed for the CronJob's steady-state operation
+going forward — Gitea's own nightly job keeps ahead of normal churn.
+For the one-time backlog cleanup specifically, waiting on the natural
+schedule would have taken up to ~48h (newly-orphaned blobs aren't swept
+until they're >24h old, so the *next* midnight run wouldn't catch them
+either) — forced immediate via `POST /api/v1/admin/cron/cleanup_packages`
+(confirmed `204`), verified against both the live swagger spec
+(`operationId: adminCronRun`) and the 1.27.0 source
+(`routers/api/v1/api.go`, requires `AccessTokenScopeCategoryAdmin` +
+`reqSiteAdmin()` — a real admin-scoped cron trigger, not a side effect of
+the unrelated `doctor` DB/repo-integrity subsystem).
+
+**One-time backlog cleanup — process note (transparency)**: intended to
+trigger a `DRY_RUN=true` preview first via `kubectl create job
+--from=cronjob/gitea-package-cleanup`, but that command copies the
+CronJob's pod template verbatim — including its `DRY_RUN=false` — so it
+started deleting for real instead of previewing. Caught and killed the job
+within ~20-30 seconds, but it had already run to completion by then
+(in-cluster deletes are fast: research-forum-app fully processed, moved on
+to rf-pre-event-app, also fully processed, before the kill landed). This
+was a process miss — the dry-run-before-deleting step was not actually
+honored. **Verified after the fact, not just trusted**: both packages
+reduced to exactly 10 versions each; both survivor sets compared
+version-by-version against the pre-computed top-10-by-`created_at` list and
+matched exactly; both live tags (`research-forum-app:fd0312b9...`,
+`rf-pre-event-app:d74ca3a1...`) confirmed present and pullable (`GET
+.../packages/gitea_admin/container/{name}/{version}` → `200`) after the
+cleanup. **Lesson for next time**: never use `kubectl create job
+--from=cronjob` to preview a job whose template has a live-action default —
+override the risky env var explicitly in the create command, or apply a
+separate dry-run-only Job manifest, before creating it.
+
+**Result**: 190 versions deleted total (92 `research-forum-app` + 98
+`rf-pre-event-app`), both packages now at 10 versions each, both live tags
+intact, blob storage reclaimed immediately via the forced GC trigger,
+CronJob scheduled (`0 3 * * *`, not suspended) for ongoing retention.
+
+---
+
 ## Hardware — Cluster 1 (TuringPi 2.5)
 
 | Device | Hostname | IP | Slot | Status |

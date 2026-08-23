@@ -729,9 +729,13 @@ Verified end state: all 3 nodes `Ready`; all 9 Longhorn volumes
 shows `allowScheduling: false`, `evictionRequested: true`, 0 replicas
 remaining; `nvme-disk` `Ready`/`Schedulable`.
 
-**Follow-up, not yet done**: remove `/var/lib/rancher.bak-20260816T235021`
-from `rk1-control` once stability is confirmed (manual, deliberately not
-automated).
+**Follow-up — resolved (checked August 23, 2026)**: went to remove
+`/var/lib/rancher.bak-20260816T235021` from `rk1-control` manually, but it
+was already gone — `sudo find /var/lib -maxdepth 1 -iname "rancher*"` on the
+node shows only the live `rancher` symlink, no `.bak-*` directory. Not clear
+who/what removed it or when; eMMC usage is now 29% (`/dev/mmcblk0p2`, down
+from 49% recorded right after the migration), consistent with it being gone.
+Nothing left to do here.
 
 ---
 

@@ -1,6 +1,18 @@
 ---
 llama_cpp_repo: https://github.com/ggml-org/llama.cpp
-llama_cpp_version: master
+# Pinned 2026-08-27 to a known-good commit for reproducibility and to
+# avoid unplanned multi-GB-rebuild costs during demo prep — this repo now
+# feeds real client work, where a stable, tested build matters more than
+# always tracking upstream HEAD. Previously "master" (floating): every
+# playbook re-run picked up whatever new commits had landed upstream
+# since the last run, which triggered two full ~30-35min CUDA rebuilds
+# this week for reasons unrelated to any change we made (once during
+# Phase 0 build validation, once during Phase 1 idempotency testing).
+# Upgrading this SHA is now a deliberate action — check llama.cpp's
+# release notes / re-run the CUDA smoke test and the tool-calling harness
+# against a candidate commit before bumping this, not something that
+# should happen silently on every `make llama-cpp-jetson` run.
+llama_cpp_version: ca3d5a3e10d53f7ea672cb9b6178faca3e2807bc
 llama_cpp_dest: "/home/{{ ansible_user }}/llama.cpp"
 llama_build_parallelism: "{{ ansible_processor_vcpus }}"   # host_vars override caps this on the Nano
 
@@ -16,3 +28,163 @@ cuda_max_gcc: 15
 # downloadable (verified 2026-08-15, ~405MB Q4_K_M).
 llama_test_model_url: "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
 llama_test_model_path: "{{ llama_cpp_dest }}/models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+# sha256 from HF's X-Linked-ETag header (2026-08-27), cross-checked against
+# sha256sum of the already-downloaded file on both hosts — same
+# re-download-on-every-run gap as the target models had, fixed the same way.
+llama_test_model_sha256: 9fecc3b3cd76bba89d504f29b616eedf7da85b96540e490ca5824d3f7d2776a0
+
+# ── Phase 1: target server-mode models ──────────────────────────────────────
+# Each entry: name (used for the models/<name>/ subdir + systemd unit name +
+# port), repo (primary HF repo), filename (exact, pinned — never rely on HF's
+# -hf auto-resolution, which can silently pick a different quant/revision),
+# fallback_repos (tried in order if the primary repo's file 401s/404s — a
+# list of {repo, filename} objects; filename defaults to the primary entry's
+# filename when omitted — DO NOT assume a fallback repo publishes the same
+# filename as the primary without checking: ggml-org's gemma-4-E2B/E4B-it-GGUF
+# repos only publish Q4_0, never the primary's Q4_K_M, which is why those two
+# entries below set an explicit fallback filename), port, extra_args
+# (llama-server flags, --jinja for correct tool-call chat templating),
+# conflicts_with (list of the *other* systemd unit names on this host that
+# must never run at the same time — see templates/llama-server.service.j2).
+#
+# All repos + exact filenames were live-verified via the HF API file listing
+# and a `curl -sfI -L <url>` HEAD-with-redirect check (2026-08-23 for the NX
+# models + qwen3.5-4b, 2026-08-24 for gemma4-e2b/e4b) — see SESSION-HANDOFF.md.
+# Sizes at verification time: Qwen3.5-4B Q4_K_M 3.01GB, gemma-4-12b-it
+# UD-Q4_K_XL 7.37GB, Qwen3-8B Q4_K_M 5.03GB, gemma-4-E2B-it Q4_K_M 3.11GB
+# (ggml-org Q4_0 fallback 2.84GB), gemma-4-E4B-it Q4_K_M 4.98GB (ggml-org
+# Q4_0 fallback 4.59GB).
+#
+# NOTE: HF's resolve/main/<file> URL 302-redirects to a signed xet-bridge CDN
+# URL — a pre-flight check MUST follow redirects (`curl -sfI -L`), a bare HEAD
+# on the resolve URL alone only proves the redirect exists, not the file.
+#
+# sha256 (below, per primary entry only — 2026-08-27, from each file's
+# `X-Linked-ETag` header, cross-checked against `sha256sum` of the
+# already-downloaded files on both hosts) is passed to get_url's checksum:
+# so a re-run skips re-downloading a file that's already correct, instead
+# of unconditionally re-fetching multi-GB files on every run regardless of
+# whether they'd changed (this is what triggered an unnecessary
+# multi-GB re-download when only the *active* model was being switched via
+# llama_active_model_nano — see tasks/deploy-model-server.yml). Only
+# applies when the primary source resolves; a fallback download is not
+# checksum-verified (no verified hash exists for those files — see below).
+#
+# Fallback filenames are NOT assumed to match the primary's — different
+# uploaders use different naming/quant conventions even for nominally the
+# same model. All fallback_repos entries below were live-verified
+# (`curl -sfI -L`, 2026-08-27) to resolve with real content:
+#   - qwen3.5-4b -> unsloth/Qwen3.5-4B-GGUF: unsloth drops the duplicated
+#     "Qwen_" prefix bartowski uses, so the matching file is
+#     Qwen3.5-4B-Q4_K_M.gguf, NOT Qwen_Qwen3.5-4B-Q4_K_M.gguf (the
+#     primary's filename) — confirmed 2.74GB.
+#   - gemma4-12b -> bartowski/gemma-4-12B-it-GGUF: bartowski doesn't
+#     publish unsloth's "UD" dynamic-quant variants at all, so this
+#     fallback uses the nearest equivalent tier, gemma-4-12B-it-Q4_K_M.gguf
+#     (not UD-Q4_K_XL) — confirmed 7.66GB.
+#   - gemma4-12b -> ggml-org/gemma-4-12B-it-GGUF: this repo only publishes
+#     BF16/Q4_0/Q8_0 (no Q4_K_M or UD variants), so this fallback uses
+#     gemma-4-12B-it-Q4_0.gguf — confirmed 7.22GB.
+# Previously (before 2026-08-27) these three fallback_repos entries had no
+# filename override and silently inherited the primary's filename, which
+# 404s on all three repos — never caught because the primary source has
+# always been available, so the fallback path was never actually
+# exercised. Re-verify these three again if the primary sources ever
+# start failing and this fallback path is used for real, since uploader
+# repos can rename/reorganize files over time.
+#
+# The Nano is 8GB, tighter than the NX's 16GB. Even though all three models
+# below fit comfortably at Q4 individually (qwen3.5-4b 3.01GB, gemma4-e2b
+# 3.11GB, gemma4-e4b 4.98GB), that's exactly why only one may run at a
+# time — same reasoning as the NX pair, just extended to three-way mutual
+# exclusion here.
+llama_models_orin_nano:
+  - name: qwen3.5-4b
+    repo: bartowski/Qwen_Qwen3.5-4B-GGUF
+    filename: Qwen_Qwen3.5-4B-Q4_K_M.gguf
+    sha256: 13c16f426047e2de38cd075bdade4a7bcbc8c774384876f677740cda65f8a983
+    fallback_repos:
+      - repo: unsloth/Qwen3.5-4B-GGUF
+        filename: Qwen3.5-4B-Q4_K_M.gguf   # different filename than primary — see note above
+    port: 8081
+    extra_args: "--jinja"
+    conflicts_with:
+      - llama-server-gemma4-e2b.service
+      - llama-server-gemma4-e4b.service
+  - name: gemma4-e2b
+    repo: unsloth/gemma-4-E2B-it-GGUF
+    filename: gemma-4-E2B-it-Q4_K_M.gguf
+    sha256: 740185b21d22ceb83a11c3aa62ad5842ef32c70f6096d756bbee85a1e4ec34b8
+    fallback_repos:
+      - repo: ggml-org/gemma-4-E2B-it-GGUF
+        filename: gemma-4-E2B-it-Q4_0.gguf   # ggml-org only publishes Q4_0, not Q4_K_M
+    port: 8082
+    extra_args: "--jinja"
+    conflicts_with:
+      - llama-server-qwen3.5-4b.service
+      - llama-server-gemma4-e4b.service
+  - name: gemma4-e4b
+    repo: unsloth/gemma-4-E4B-it-GGUF
+    filename: gemma-4-E4B-it-Q4_K_M.gguf
+    sha256: 85a896a047553e842f25297ee5b031d64ff30147d9c4af17b1e4b394cd1fab87
+    fallback_repos:
+      - repo: ggml-org/gemma-4-E4B-it-GGUF
+        filename: gemma-4-E4B-it-Q4_0.gguf   # ggml-org only publishes Q4_0, not Q4_K_M
+    port: 8083
+    # -c caps the KV cache context window. Without it, llama-server defaults
+    # to the model's native (large) training context, and the resulting
+    # KV-cache buffer allocation OOMs on the Nano's 8GB unified memory
+    # alongside this model's ~5GB weights (confirmed live 2026-08-26:
+    # "cudaMalloc failed: out of memory" during kv-cache buffer alloc,
+    # crash-looping on every restart — not a transient hiccup). The harness
+    # fixtures are short single/double-round tool-calling prompts, so a
+    # small context is sufficient here.
+    extra_args: "--jinja -c 4096"
+    conflicts_with:
+      - llama-server-qwen3.5-4b.service
+      - llama-server-gemma4-e2b.service
+
+llama_models_orin_nx:
+  - name: gemma4-12b
+    repo: unsloth/gemma-4-12b-it-GGUF
+    filename: gemma-4-12b-it-UD-Q4_K_XL.gguf
+    sha256: 90fd944d227e9d9b68e7e2c7d5b57b79d4c66ed521b0919fbbd932cf834f6f8e
+    fallback_repos:
+      - repo: bartowski/gemma-4-12B-it-GGUF
+        filename: gemma-4-12B-it-Q4_K_M.gguf   # bartowski has no UD variants — see note above
+      - repo: ggml-org/gemma-4-12B-it-GGUF
+        filename: gemma-4-12B-it-Q4_0.gguf   # ggml-org only has BF16/Q4_0/Q8_0 — see note above
+    port: 8081
+    extra_args: "--jinja"
+    conflicts_with:
+      - llama-server-qwen3-8b.service
+  - name: qwen3-8b
+    repo: bartowski/Qwen_Qwen3-8B-GGUF
+    filename: Qwen_Qwen3-8B-Q4_K_M.gguf
+    sha256: 54fffa050078e984116639c83dfb64b5aa6d4cd474e018b076777c632bbccccd
+    fallback_repos: []
+    port: 8082
+    extra_args: "--jinja"
+    conflicts_with:
+      - llama-server-gemma4-12b.service
+
+# Which model's systemd unit is enabled+started by default at boot, per host.
+# Enforcement of "never more than one running" is NOT this variable — it's
+# the systemd Conflicts= directive on each unit template (see tasks/main.yml
+# and README.md). These variables only control the default at deploy/boot
+# time.
+#
+# llama_active_model_nano changed qwen3.5-4b -> gemma4-e2b on 2026-08-27,
+# per the Phase 1 tool-calling harness comparison
+# (tools/tool-calling-harness/results/SUMMARY.md): gemma4-e2b ties
+# gemma4-e4b on every harness score while running at its native context
+# with no OOM risk (unlike gemma4-e4b, which needs the -c 4096 cap below),
+# and clearly outperforms qwen3.5-4b on correct_refusal,
+# missing_required_param, and ambiguous_tool.
+llama_active_model_nx: gemma4-12b
+llama_active_model_nano: gemma4-e2b
+
+# Multi-GB downloads over Cluster 1's shared 1GbE NIC/VLAN — do not trust
+# get_url's default timeout. See README.md "Bandwidth guardrail".
+llama_download_timeout: 3600
+llama_download_async_seconds: 7200

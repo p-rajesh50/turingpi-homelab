@@ -1,0 +1,211 @@
+{
+  "tools": [
+    {
+      "type": "function",
+      "function": {
+        "name": "get_budget_status",
+        "description": "Look up the current budget status (spend vs. allocation) for a team.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "team": {
+              "type": "string",
+              "description": "The team name to look up budget status for."
+            },
+            "period": {
+              "type": "string",
+              "description": "Billing period to check, e.g. 'Q2 2026' or 'August 2026'. Defaults to the current month if omitted."
+            }
+          },
+          "required": ["team"]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "create_api_key",
+        "description": "Issue a new API key for a team with the given scopes.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "team": {
+              "type": "string",
+              "description": "The team the key is issued to."
+            },
+            "scopes": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "List of permission scopes for the key, e.g. ['read', 'write', 'admin']."
+            }
+          },
+          "required": ["team", "scopes"]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "check_rate_limit",
+        "description": "Check the current rate-limit status for a specific API key.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "key_id": {
+              "type": "string",
+              "description": "The identifier of the API key to check."
+            }
+          },
+          "required": ["key_id"]
+        }
+      }
+    }
+  ],
+
+  "cases": [
+    {
+      "id": "correct-01",
+      "category": "correct_tool_correct_params",
+      "prompt": "What's the current budget status for the research-forum team?",
+      "expected_tool": "get_budget_status",
+      "expected_params": { "team": "research-forum" },
+      "notes": "period omitted on purpose — should default, not be guessed as a required field."
+    },
+    {
+      "id": "correct-02",
+      "category": "correct_tool_correct_params",
+      "prompt": "Can you check the budget status for team \"payments\" for Q2 2026?",
+      "expected_tool": "get_budget_status",
+      "expected_params": { "team": "payments", "period": "Q2 2026" },
+      "notes": "Reworded 2026-08-26 (was: \"Can you check the payments team's budget status for Q2 2026?\"). The original '<team-name> team' phrasing was genuinely ambiguous about whether \"team\" belonged to the identifier — all 6 models tested (qwen3.5-4b, gemma4-e2b, gemma4-e4b, gemma4-12b, qwen3-8b) appended the literal word \"team\" to the argument (e.g. team=\"payments team\" instead of \"payments\"), scored as partial_params, on this and the other two multi-field cases (correct-03/04) sharing the same phrasing pattern. Quoting the bare identifier after the word \"team\" removes that ambiguity. See fixtures.json git history / results/SUMMARY.md for the investigation."
+    },
+    {
+      "id": "correct-03",
+      "category": "correct_tool_correct_params",
+      "prompt": "Please create a new API key for team \"analytics\" with read and write scopes.",
+      "expected_tool": "create_api_key",
+      "expected_params": { "team": "analytics", "scopes": ["read", "write"] },
+      "notes": "Reworded 2026-08-26 (was: \"Please create a new API key for the analytics team with read and write scopes.\") — same '<team-name> team' ambiguity fix as correct-02, see that case's note."
+    },
+    {
+      "id": "correct-04",
+      "category": "correct_tool_correct_params",
+      "prompt": "I need an API key for team \"infra\", admin scope only.",
+      "expected_tool": "create_api_key",
+      "expected_params": { "team": "infra", "scopes": ["admin"] },
+      "notes": "Reworded 2026-08-26 (was: \"I need an API key for the infra team, admin scope only.\") — same '<team-name> team' ambiguity fix as correct-02, see that case's note."
+    },
+    {
+      "id": "correct-05",
+      "category": "correct_tool_correct_params",
+      "prompt": "What's the current rate limit status for key abc-123-prod?",
+      "expected_tool": "check_rate_limit",
+      "expected_params": { "key_id": "abc-123-prod" }
+    },
+    {
+      "id": "correct-06",
+      "category": "correct_tool_correct_params",
+      "prompt": "Check the rate limit on key gitea-cr-narrow-01.",
+      "expected_tool": "check_rate_limit",
+      "expected_params": { "key_id": "gitea-cr-narrow-01" }
+    },
+
+    {
+      "id": "refusal-01",
+      "category": "correct_refusal",
+      "prompt": "Please delete the API key with id 9f2e-prod.",
+      "expected_tool": null,
+      "notes": "No delete_api_key tool exists — model should say it can't do this, not call create_api_key or check_rate_limit as a substitute."
+    },
+    {
+      "id": "refusal-02",
+      "category": "correct_refusal",
+      "prompt": "Can you rotate the API key for the billing team?",
+      "expected_tool": null,
+      "notes": "No rotate tool exists. A wrong-tool failure here would likely be calling create_api_key as if 'rotate' meant 'issue a new one', which is a materially different operation."
+    },
+    {
+      "id": "refusal-03",
+      "category": "correct_refusal",
+      "prompt": "Increase the rate limit for key mobile-app-42 to 1000 requests per minute.",
+      "expected_tool": null,
+      "notes": "check_rate_limit is read-only status; no set/adjust-limit tool exists."
+    },
+    {
+      "id": "refusal-04",
+      "category": "correct_refusal",
+      "prompt": "List all API keys currently issued to the research-forum team.",
+      "expected_tool": null,
+      "notes": "No list/enumerate tool exists — only per-key rate-limit lookup and per-team budget/creation."
+    },
+
+    {
+      "id": "missing-01",
+      "category": "missing_required_param",
+      "prompt": "Create an API key with read access.",
+      "expected_tool": "create_api_key",
+      "missing_field": "team",
+      "notes": "Model should ask which team, not guess or invent one."
+    },
+    {
+      "id": "missing-02",
+      "category": "missing_required_param",
+      "prompt": "What's the budget status?",
+      "expected_tool": "get_budget_status",
+      "missing_field": "team",
+      "notes": "No team named anywhere in the prompt or prior context."
+    },
+    {
+      "id": "missing-03",
+      "category": "missing_required_param",
+      "prompt": "Check the rate limit.",
+      "expected_tool": "check_rate_limit",
+      "missing_field": "key_id",
+      "notes": "No key identifier given at all."
+    },
+    {
+      "id": "missing-04",
+      "category": "missing_required_param",
+      "prompt": "Create an API key for the platform team.",
+      "expected_tool": "create_api_key",
+      "missing_field": "scopes",
+      "notes": "Team given, scopes omitted — model should ask which scopes, not default to a guess like ['read']."
+    },
+
+    {
+      "id": "ambiguous-01",
+      "category": "ambiguous_tool",
+      "prompt": "Something's off with the growth team's API usage — can you look into it?",
+      "plausible_tools": ["get_budget_status", "check_rate_limit"],
+      "notes": "'API usage' could mean spend (budget) or throttling (rate limit), and no key_id is given for the rate-limit path anyway. Correct behavior is asking which one, not confidently picking one."
+    },
+    {
+      "id": "ambiguous-02",
+      "category": "ambiguous_params",
+      "prompt": "I need access set up for the new mobile initiative.",
+      "plausible_tools": ["create_api_key"],
+      "notes": "Tool choice is unambiguous (create_api_key) — this is deliberately a different failure surface from ambiguous-01's tool-choice ambiguity. What's unresolved is parameter values: 'the new mobile initiative' is not a real team name, and scopes are unstated. This case intentionally compounds two unresolved values (team AND scopes) in one prompt, mirroring how real-world requests are often this messy — it is NOT a clean single-variable test. Guessing either value risks creating a key against a team that doesn't exist, or with the wrong scopes. Correct behavior is confirming both, not guessing either."
+    },
+
+    {
+      "id": "chained-01",
+      "category": "multi_step_chained",
+      "prompt": "Check the research-forum team's budget status, and if they're under budget, create them a new API key with read and write scopes.",
+      "expected_tool_sequence": ["get_budget_status", "create_api_key"],
+      "synthetic_result_favorable": {"team": "research-forum", "status": "under_budget", "spent_pct": 42},
+      "synthetic_result_unfavorable": {"team": "research-forum", "status": "over_budget", "spent_pct": 118},
+      "gate_keywords": ["over budget", "over-budget", "exceeded", "budget"],
+      "notes": "Second call is conditional on the first call's result — calling create_api_key unconditionally in the same turn (before seeing the budget result) is a chaining failure, not just a wrong-tool failure. Round 2 is tested twice: once with a favorable synthetic result (should proceed to create_api_key) and once with an unfavorable one (should NOT create the key, and should say why)."
+    },
+    {
+      "id": "chained-02",
+      "category": "multi_step_chained",
+      "prompt": "First check the rate limit on key mobile-app-42, and if it's not currently limited, check the payments team's budget status too.",
+      "expected_tool_sequence": ["check_rate_limit", "get_budget_status"],
+      "synthetic_result_favorable": {"key_id": "mobile-app-42", "status": "ok", "limited": false},
+      "synthetic_result_unfavorable": {"key_id": "mobile-app-42", "status": "limited", "limited": true},
+      "gate_keywords": ["rate limit", "rate-limited", "limited", "throttl"],
+      "notes": "Tests ordering and conditionality, not just 'call both tools eventually'. Round 2 is tested twice: once with a favorable synthetic result (should proceed to get_budget_status) and once with an unfavorable one (should NOT check budget, and should say why)."
+    }
+  ]
+}

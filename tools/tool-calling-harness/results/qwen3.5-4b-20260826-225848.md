@@ -1,0 +1,17 @@
+# Tool-calling harness results — qwen3.5-4b
+
+Base URL: `http://10.0.0.50:8081` — repeats: 5 — temp: 0.6 — top_p: 0.95 — run: 20260826-225848
+
+## Per-category summary
+
+| Category | Mean pass rate | Mean weighted score |
+|---|---|---|
+| correct_tool_correct_params | 1.00 | 5.00 |
+
+## Per-case detail
+
+| Case | Category | Branch | Pass rate | Weighted score | Dominant label |
+|---|---|---|---|---|---|
+| correct-02 | correct_tool_correct_params | single | 1.00 (5/5) | 5.00 | correct_tool_correct_params |
+| correct-03 | correct_tool_correct_params | single | 1.00 (5/5) | 5.00 | correct_tool_correct_params |
+| correct-04 | correct_tool_correct_params | single | 1.00 (5/5) | 5.00 | correct_tool_correct_params |

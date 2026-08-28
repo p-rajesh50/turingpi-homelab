@@ -1,0 +1,22 @@
+[Unit]
+Description=llama.cpp server ({{ item.name }})
+After=network-online.target
+Wants=network-online.target
+{% for c in item.conflicts_with | default([]) %}
+Conflicts={{ c }}
+{% endfor %}
+
+[Service]
+Type=simple
+User={{ ansible_user }}
+ExecStart={{ llama_cpp_dest }}/build/bin/llama-server \
+  -m {{ llama_cpp_dest }}/models/{{ item.name }}/{{ item.filename }} \
+  --host 0.0.0.0 \
+  --port {{ item.port }} \
+  -ngl 99 \
+  {{ item.extra_args }}
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

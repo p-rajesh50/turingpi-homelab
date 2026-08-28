@@ -1,0 +1,91 @@
+---
+# Included per-model (loop var `item`) from tasks/main.yml. Handles: model
+# directory, async download (long timeout — shared 1GbE on Cluster 1), the
+# systemd unit, and an idempotency guard that only (re)starts a
+# default-active model if it isn't already active AND healthy.
+
+- name: "Ensure models/{{ item.name }} directory exists"
+  ansible.builtin.file:
+    path: "{{ llama_cpp_dest }}/models/{{ item.name }}"
+    state: directory
+    mode: "0755"
+  become: false
+
+# checksum: only set when the resolved URL is this model's primary source
+# (item.repo + item.filename) AND item.sha256 is defined — get_url then
+# skips re-downloading a file already on disk with a matching hash,
+# instead of unconditionally re-fetching a multi-GB file on every run
+# regardless of whether it changed. A fallback download has no verified
+# hash (see defaults/main.yml's "KNOWN GAP" note) so is left
+# unchecksummed, same as before this change — no behavior change on that
+# path.
+- name: "Download {{ item.name }} model (fire-and-forget async — do not block the play on a multi-GB transfer)"
+  ansible.builtin.get_url:
+    url: "{{ llama_resolved_urls[item.name] }}"
+    dest: "{{ llama_cpp_dest }}/models/{{ item.name }}/{{ item.filename }}"
+    mode: "0644"
+    timeout: "{{ llama_download_timeout }}"
+    checksum: >-
+      {{ ('sha256:' + item.sha256)
+         if (llama_resolved_urls[item.name] == 'https://huggingface.co/' + item.repo + '/resolve/main/' + item.filename and item.sha256 is defined)
+         else omit }}
+  become: false
+  async: "{{ llama_download_async_seconds }}"
+  poll: 0
+  register: llama_download_job
+
+- name: "Wait for {{ item.name }} download to finish (polls every 30s, up to llama_download_async_seconds)"
+  ansible.builtin.async_status:
+    jid: "{{ llama_download_job.ansible_job_id }}"
+  register: llama_download_result
+  until: llama_download_result.finished
+  retries: "{{ (llama_download_async_seconds / 30) | int }}"
+  delay: 30
+  become: false
+
+- name: "Deploy systemd unit for {{ item.name }}"
+  ansible.builtin.template:
+    src: llama-server.service.j2
+    dest: "/etc/systemd/system/llama-server-{{ item.name }}.service"
+    mode: "0644"
+  register: llama_unit_deployed
+
+- name: "Reload systemd daemon after unit change for {{ item.name }}"
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when: llama_unit_deployed.changed
+
+- name: "Check if {{ item.name }} unit is already active"
+  ansible.builtin.command: "systemctl is-active llama-server-{{ item.name }}.service"
+  register: llama_unit_status
+  changed_when: false
+  failed_when: false
+  when: item.name in llama_default_active_units
+
+- name: "Check {{ item.name }} /health endpoint (only if unit already active)"
+  ansible.builtin.uri:
+    url: "http://localhost:{{ item.port }}/health"
+    status_code: 200
+  register: llama_health_status
+  failed_when: false
+  when: >-
+    item.name in llama_default_active_units and
+    llama_unit_status.stdout | default('') == 'active'
+
+- name: "Enable+start {{ item.name }} (default-active model, not already active+healthy)"
+  ansible.builtin.systemd:
+    name: "llama-server-{{ item.name }}.service"
+    enabled: true
+    state: started
+  when: >-
+    item.name in llama_default_active_units and
+    not (
+      llama_unit_status.stdout | default('') == 'active' and
+      llama_health_status.status | default(0) == 200
+    )
+
+- name: "Ensure non-default-active {{ item.name }} unit is installed but not auto-started"
+  ansible.builtin.systemd:
+    name: "llama-server-{{ item.name }}.service"
+    enabled: false
+  when: item.name not in llama_default_active_units

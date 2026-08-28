@@ -1,0 +1,1825 @@
+{
+  "model": "gemma4-e4b",
+  "base_url": "http://10.0.0.50:8083",
+  "timestamp": "20260826-125709",
+  "repeats": 5,
+  "temperature": 0.6,
+  "top_p": 0.95,
+  "request_timeout": 180,
+  "cases": [
+    {
+      "case_id": "correct-01",
+      "category": "correct_tool_correct_params",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_tool_correct_params",
+          "labels": [
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params"
+          ],
+          "repeats": [
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"team\":\"research-forum\"}"
+                    },
+                    "id": "Kfpnlux1BMnOGWpK9Dp2Go2B5LWoY93f"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"team\":\"research-forum\"}"
+                    },
+                    "id": "ip8H3LNCaNB8Uvwrvygp045HwWayU3C5"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"team\":\"research-forum\"}"
+                    },
+                    "id": "CF5FkzzXQKATnOMm9bfUwhgme3dpxGF8"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"team\":\"research-forum\"}"
+                    },
+                    "id": "mm7RCUVmyHvZH7jVd9N4ycYI1cZWhMTw"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"team\":\"research-forum\"}"
+                    },
+                    "id": "tMpW5j6EYe55vNEEStfxU2RoxWQJF0oG"
+                  }
+                ],
+                "content": ""
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "correct-02",
+      "category": "correct_tool_correct_params",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_tool_correct_params",
+          "labels": [
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params"
+          ],
+          "repeats": [
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"period\":\"Q2 2026\",\"team\":\"payments\"}"
+                    },
+                    "id": "878LleFNC0xGrtzmF7C7W0jUocbhj5Ie"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"period\":\"Q2 2026\",\"team\":\"payments\"}"
+                    },
+                    "id": "OvskiEZWjmgNFiVXsXapjBBfF3AQKGRk"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"period\":\"Q2 2026\",\"team\":\"payments\"}"
+                    },
+                    "id": "GiLMK4mqNPSuwWMurBeT6TxPi1n7kugm"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"period\":\"Q2 2026\",\"team\":\"payments\"}"
+                    },
+                    "id": "J0QJScAIkq45TkVRFoRqBlkNodcuHKY2"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"period\":\"Q2 2026\",\"team\":\"payments\"}"
+                    },
+                    "id": "6kboStBSl5GDnJbe7qicoPTsrCEvLJGM"
+                  }
+                ],
+                "content": ""
+              }
+            }
+          ],
+          "retested_from": "gemma4-e4b-20260826-230658.json"
+        }
+      }
+    },
+    {
+      "case_id": "correct-03",
+      "category": "correct_tool_correct_params",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_tool_correct_params",
+          "labels": [
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params"
+          ],
+          "repeats": [
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"scopes\":[\"read\",\"write\"],\"team\":\"analytics\"}"
+                    },
+                    "id": "Y0pRjM3IqH0kVPRSxADgSrpURaMp66S0"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"scopes\":[\"read\",\"write\"],\"team\":\"analytics\"}"
+                    },
+                    "id": "GqaSVhA5Fe1ax3htZr3zh7l4wKP8f1av"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"scopes\":[\"read\",\"write\"],\"team\":\"analytics\"}"
+                    },
+                    "id": "T4fl2gLLFW4Ws1mdXazofNB8ELRWjclV"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"scopes\":[\"read\",\"write\"],\"team\":\"analytics\"}"
+                    },
+                    "id": "P02NbcQsaU2Kvj4oecZIdh5PxCI9vmTi"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"scopes\":[\"read\",\"write\"],\"team\":\"analytics\"}"
+                    },
+                    "id": "J1xiWnvGCl2Mqcv78L5gfcgg9ZAQo2tB"
+                  }
+                ],
+                "content": ""
+              }
+            }
+          ],
+          "retested_from": "gemma4-e4b-20260826-230658.json"
+        }
+      }
+    },
+    {
+      "case_id": "correct-04",
+      "category": "correct_tool_correct_params",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_tool_correct_params",
+          "labels": [
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params"
+          ],
+          "repeats": [
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"scopes\":[\"admin\"],\"team\":\"infra\"}"
+                    },
+                    "id": "F2u4Sm5s93gyGUSsIzm6RbPqHfqBEYAo"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"scopes\":[\"admin\"],\"team\":\"infra\"}"
+                    },
+                    "id": "KTmcYBMfcNdvzBYmGfwvFTp30su2nLEB"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"scopes\":[\"admin\"],\"team\":\"infra\"}"
+                    },
+                    "id": "Ol30DQW1IOgjuksnjFL5sBuDAnAHrkzv"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"scopes\":[\"admin\"],\"team\":\"infra\"}"
+                    },
+                    "id": "hhNcnNy0JIKYUXgx16bm18TPYTQSXX1r"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"scopes\":[\"admin\"],\"team\":\"infra\"}"
+                    },
+                    "id": "O90NVG0CI1sJ3Iw7cfHFu3PnFByMfe31"
+                  }
+                ],
+                "content": ""
+              }
+            }
+          ],
+          "retested_from": "gemma4-e4b-20260826-230658.json"
+        }
+      }
+    },
+    {
+      "case_id": "correct-05",
+      "category": "correct_tool_correct_params",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_tool_correct_params",
+          "labels": [
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params"
+          ],
+          "repeats": [
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "check_rate_limit",
+                      "arguments": "{\"key_id\":\"abc-123-prod\"}"
+                    },
+                    "id": "klJ22L5YlpDsi4CP3NDj0OnogPXRkxB1"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "check_rate_limit",
+                      "arguments": "{\"key_id\":\"abc-123-prod\"}"
+                    },
+                    "id": "kZYsuXzSNSro8sVMmuW1HU0LIQ6m4QC0"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "check_rate_limit",
+                      "arguments": "{\"key_id\":\"abc-123-prod\"}"
+                    },
+                    "id": "VmM93l0L2vB76nAcen7VasU1UXO9Ki5f"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "check_rate_limit",
+                      "arguments": "{\"key_id\":\"abc-123-prod\"}"
+                    },
+                    "id": "5Yk1MArQ3zrHvxuGb6HOYY8gPyd3KgrG"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "check_rate_limit",
+                      "arguments": "{\"key_id\":\"abc-123-prod\"}"
+                    },
+                    "id": "QAQClOw6KTU3FHQWaR2ShyezjCL30zCu"
+                  }
+                ],
+                "content": ""
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "correct-06",
+      "category": "correct_tool_correct_params",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_tool_correct_params",
+          "labels": [
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params"
+          ],
+          "repeats": [
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "check_rate_limit",
+                      "arguments": "{\"key_id\":\"gitea-cr-narrow-01\"}"
+                    },
+                    "id": "eGohkYoClO5F92XCSfvA4RltcguBjLt2"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "check_rate_limit",
+                      "arguments": "{\"key_id\":\"gitea-cr-narrow-01\"}"
+                    },
+                    "id": "MI91M6vM36euTXeL3vDcHsrepW1V4iXB"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "check_rate_limit",
+                      "arguments": "{\"key_id\":\"gitea-cr-narrow-01\"}"
+                    },
+                    "id": "ajHOOQmZz528uLdkEad4ITKsdG0SOCFB"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "check_rate_limit",
+                      "arguments": "{\"key_id\":\"gitea-cr-narrow-01\"}"
+                    },
+                    "id": "ADR4duRAclUKdyzn9DmRK3Yjcqj0xFGy"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "check_rate_limit",
+                      "arguments": "{\"key_id\":\"gitea-cr-narrow-01\"}"
+                    },
+                    "id": "K1q6814zUHWd3RPEIv3akKqZiiRNuTnp"
+                  }
+                ],
+                "content": ""
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "refusal-01",
+      "category": "correct_refusal",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_refusal",
+          "labels": [
+            "correct_refusal",
+            "correct_refusal",
+            "correct_refusal",
+            "correct_refusal",
+            "correct_refusal"
+          ],
+          "repeats": [
+            {
+              "label": "correct_refusal",
+              "raw": {
+                "tool_calls": null,
+                "content": "I am sorry, but I do not have a tool available that allows me to delete an API key."
+              }
+            },
+            {
+              "label": "correct_refusal",
+              "raw": {
+                "tool_calls": null,
+                "content": "I do not have a tool available to delete an API key. I can only create API keys, check budget status, or check rate limits."
+              }
+            },
+            {
+              "label": "correct_refusal",
+              "raw": {
+                "tool_calls": null,
+                "content": "I do not have a tool available to delete an API key. I can only check budget status, create API keys, or check rate limits."
+              }
+            },
+            {
+              "label": "correct_refusal",
+              "raw": {
+                "tool_calls": null,
+                "content": "I am sorry, but I do not have a tool that allows me to delete an API key. I can only check the budget status, create new API keys, or check rate limits."
+              }
+            },
+            {
+              "label": "correct_refusal",
+              "raw": {
+                "tool_calls": null,
+                "content": "I am sorry, but I do not have a function available to delete an API key. I can only check budget status, create API keys, or check rate limits."
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "refusal-02",
+      "category": "correct_refusal",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_refusal",
+          "labels": [
+            "correct_refusal",
+            "correct_refusal",
+            "correct_refusal",
+            "correct_refusal",
+            "correct_refusal"
+          ],
+          "repeats": [
+            {
+              "label": "correct_refusal",
+              "raw": {
+                "tool_calls": null,
+                "content": "I do not have a tool available to rotate an existing API key. I can, however, create a *new* API key for the billing team if you provide the required permission scopes (e.g., `['read', 'write']`)."
+              }
+            },
+            {
+              "label": "correct_refusal",
+              "raw": {
+                "tool_calls": null,
+                "content": "I do not have a tool available to rotate an existing API key. I can only create new API keys, check budget status, or check rate limits."
+              }
+            },
+            {
+              "label": "correct_refusal",
+              "raw": {
+                "tool_calls": null,
+                "content": "I do not have a function available to rotate an existing API key. I can issue a new API key using `create_api_key`, but I cannot manage the rotation process for an existing key."
+              }
+            },
+            {
+              "label": "correct_refusal",
+              "raw": {
+                "tool_calls": null,
+                "content": "I do not have a tool available to rotate an existing API key. I can, however, create a *new* API key for the billing team if you provide the desired scopes (permissions) for that key.\n\nWould you like me to create a new key instead?"
+              }
+            },
+            {
+              "label": "correct_refusal",
+              "raw": {
+                "tool_calls": null,
+                "content": "I am sorry, but I do not have a tool available to rotate an existing API key. I can only issue new API keys (`create_api_key`), check budget status (`get_budget_status`), or check rate limits (`check_rate_limit`)."
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "refusal-03",
+      "category": "correct_refusal",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_refusal",
+          "labels": [
+            "correct_refusal",
+            "correct_refusal",
+            "correct_refusal",
+            "correct_refusal",
+            "correct_refusal"
+          ],
+          "repeats": [
+            {
+              "label": "correct_refusal",
+              "raw": {
+                "tool_calls": null,
+                "content": "I am sorry, but I do not have a tool that allows me to increase or modify the rate limit for an existing API key. I can only check the current rate limit status using the `check_rate_limit` function."
+              }
+            },
+            {
+              "label": "correct_refusal",
+              "raw": {
+                "tool_calls": null,
+                "content": "I am sorry, but I do not have a tool that allows me to increase or modify the rate limit for an existing API key. I can only check the current rate limit status."
+              }
+            },
+            {
+              "label": "correct_refusal",
+              "raw": {
+                "tool_calls": null,
+                "content": "I cannot increase the rate limit for a key. I only have the ability to check the current rate limit status using the `check_rate_limit` tool."
+              }
+            },
+            {
+              "label": "correct_refusal",
+              "raw": {
+                "tool_calls": null,
+                "content": "I am sorry, I cannot fulfill that request. I do not have a tool or function available that allows me to increase or modify the rate limit for an existing API key. I can only check the current rate limit status using the `check_rate_limit` tool."
+              }
+            },
+            {
+              "label": "correct_refusal",
+              "raw": {
+                "tool_calls": null,
+                "content": "I am sorry, but I do not have a tool that allows me to increase or modify the rate limit for an existing API key. I can only check the current rate limit status."
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "refusal-04",
+      "category": "correct_refusal",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_refusal",
+          "labels": [
+            "correct_refusal",
+            "correct_refusal",
+            "correct_refusal",
+            "correct_refusal",
+            "correct_refusal"
+          ],
+          "repeats": [
+            {
+              "label": "correct_refusal",
+              "raw": {
+                "tool_calls": null,
+                "content": "I am sorry, but I do not have a tool that allows me to list all API keys currently issued to a team. I can only create new keys, check budget status, or check rate limits for a specific key."
+              }
+            },
+            {
+              "label": "correct_refusal",
+              "raw": {
+                "tool_calls": null,
+                "content": "I do not have a tool that can list all API keys issued to a specific team. I can only create new API keys or check the rate limit of an existing key."
+              }
+            },
+            {
+              "label": "correct_refusal",
+              "raw": {
+                "tool_calls": null,
+                "content": "I do not have a tool that allows me to list all API keys issued to a specific team. I can only create new keys or check the rate limit of an existing key."
+              }
+            },
+            {
+              "label": "correct_refusal",
+              "raw": {
+                "tool_calls": null,
+                "content": "I do not have a tool that allows me to list all API keys issued to a specific team. I can only create new keys or check the rate limit of an existing key."
+              }
+            },
+            {
+              "label": "correct_refusal",
+              "raw": {
+                "tool_calls": null,
+                "content": "I do not have a tool that allows me to list all API keys issued to a specific team. I can only create new keys or check the rate limit of a known key."
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "missing-01",
+      "category": "missing_required_param",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "missing_clarification",
+          "labels": [
+            "missing_clarification",
+            "missing_clarification",
+            "missing_clarification",
+            "missing_clarification",
+            "missing_clarification"
+          ],
+          "repeats": [
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "I need to know which team you would like the API key to be created for. Can you please provide the team name?"
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "Which team should the API key be created for?"
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "I can create an API key with read access, but I need to know which team it should be issued to. Please provide the team name."
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "Which team should I create the API key for?"
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "I need to know which team you would like to issue the API key to. Can you please provide the team name?"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "missing-02",
+      "category": "missing_required_param",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "missing_clarification",
+          "labels": [
+            "missing_clarification",
+            "missing_clarification",
+            "missing_clarification",
+            "missing_clarification",
+            "missing_clarification"
+          ],
+          "repeats": [
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "I can help with that, but I need to know which team you are referring to. Please provide the team name."
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "I can help with that! Could you please specify which team you would like to check the budget status for?"
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "I need to know which team you would like the budget status for."
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "I can help you with that, but I need to know which team you'd like the budget status for. Please provide the team name."
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "I can check the budget status for you. Which team would you like me to look up?"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "missing-03",
+      "category": "missing_required_param",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "missing_clarification",
+          "labels": [
+            "missing_clarification",
+            "missing_clarification",
+            "missing_clarification",
+            "missing_clarification",
+            "missing_clarification"
+          ],
+          "repeats": [
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "I need the API key ID to check the rate limit. Could you please provide it?"
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "I need the API key ID to check the rate limit. Please provide the `key_id`."
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "I need the identifier of the API key (`key_id`) to check the rate limit. Please provide it."
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "I need the API key ID to check the rate limit. Please provide the key ID."
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "I need the identifier of the API key you want to check the rate limit for. Please provide the `key_id`."
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "missing-04",
+      "category": "missing_required_param",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "missing_clarification",
+          "labels": [
+            "missing_clarification",
+            "missing_clarification",
+            "missing_clarification",
+            "missing_clarification",
+            "missing_clarification"
+          ],
+          "repeats": [
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "What scopes (permissions) should the API key have (e.g., ['read'], ['write'], ['admin'])?"
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "I can create an API key for the platform team, but I need to know what permissions (scopes) you want the key to have.\n\nPlease specify the scopes (e.g., `['read', 'write', 'admin']`)."
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "What scopes would you like the API key to have (e.g., 'read', 'write', 'admin')?"
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "What scopes should the API key have? (e.g., ['read', 'write', 'admin'])"
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "What scopes should the API key have? For example, you can specify `['read']`, `['write']`, or `['admin']`."
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "ambiguous-01",
+      "category": "ambiguous_tool",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "missing_clarification",
+          "labels": [
+            "missing_clarification",
+            "missing_clarification",
+            "missing_clarification",
+            "missing_clarification",
+            "missing_clarification"
+          ],
+          "repeats": [
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "I can certainly look into that, but \"API usage\" can mean a few different things. To help me investigate, could you clarify what you'd like me to check?\n\nFor example, are you concerned about:\n\n1.  **Rate limits** (e.g., are the calls being blocked or throttled)? If so, I would need the specific **API key ID**.\n2.  **Budget status** (e.g., is the team overspending)?\n3.  **Something else** (like error rates or specific usage patterns)?"
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "I can look into API usage issues, but I need a little more information to know exactly what to check.\n\nAre you concerned about:\n\n1.  **Rate limits** (i.e., the team is hitting usage caps)? If so, I would need the specific API key ID.\n2.  **Budget overruns** (i.e., the usage is costing more than allocated)?\n3.  **Something else** (e.g., errors or unusual activity)?\n\nOnce I know what kind of issue you are seeing, I can use the available tools to investigate."
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "I can help you look into that, but I need a specific API key ID to check the usage.\n\nCould you please provide the API key ID you would like me to check?"
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "I can look into a few different aspects of API usage, such as the budget status or rate limits. To help me investigate, could you specify what you'd like to check?\n\nFor example, are you interested in:\n\n1.  **The budget status** for the Growth Team? (If so, what billing period should I check?)\n2.  **The rate limit status** for a specific API key? (If so, please provide the key ID.)"
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "To look into the API usage, I need a specific API key ID. Could you please provide the key ID for the Growth team's API key?"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "ambiguous-02",
+      "category": "ambiguous_params",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "missing_clarification",
+          "labels": [
+            "missing_clarification",
+            "missing_clarification",
+            "missing_clarification",
+            "missing_clarification",
+            "missing_clarification"
+          ],
+          "repeats": [
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "To set up access, I need a few more details.\n\nCould you please specify:\n\n1.  **Which team** this access is for?\n2.  **What permissions (scopes)** the access needs (e.g., `read`, `write`, `admin`)?"
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "Could you please provide the name of the team and the specific permissions (scopes) required for the mobile initiative? For example, do they need 'read', 'write', or 'admin' access?"
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "Could you please specify which team needs this access and what level of permissions (scopes) they require? For example, do they need 'read' access, 'write' access, or 'admin' access?"
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "Could you please provide the name of the team that needs access, and what specific permissions (scopes) are required for the mobile initiative? For example, do they need 'read' access, 'write' access, or 'admin' access?"
+              }
+            },
+            {
+              "label": "missing_clarification",
+              "raw": {
+                "tool_calls": null,
+                "content": "Could you please provide the name of the team and the specific permissions (scopes) required for the new mobile initiative? For example, do they need 'read', 'write', or 'admin' access?"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "chained-01",
+      "category": "multi_step_chained",
+      "branches": {
+        "favorable": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "chained_correct",
+          "labels": [
+            "chained_correct",
+            "chained_correct",
+            "chained_correct",
+            "chained_correct",
+            "chained_correct"
+          ],
+          "repeats": [
+            {
+              "label": "chained_correct",
+              "raw": {
+                "round1": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "get_budget_status",
+                        "arguments": "{\"team\":\"research-forum\"}"
+                      },
+                      "id": "vis5pgMiMC8GxTL8KMq3rA97091N7ymb"
+                    }
+                  ],
+                  "content": ""
+                },
+                "round2": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "create_api_key",
+                        "arguments": "{\"scopes\":[\"read\",\"write\"],\"team\":\"research-forum\"}"
+                      },
+                      "id": "P3BuguN0JW23THAQKEu1LAgBtZmo5Ta6"
+                    }
+                  ],
+                  "content": ""
+                }
+              }
+            },
+            {
+              "label": "chained_correct",
+              "raw": {
+                "round1": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "get_budget_status",
+                        "arguments": "{\"team\":\"research-forum\"}"
+                      },
+                      "id": "aW11OVY7FfKORMvaf0Q2eCv7G9I5hRJx"
+                    }
+                  ],
+                  "content": ""
+                },
+                "round2": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "create_api_key",
+                        "arguments": "{\"scopes\":[\"read\",\"write\"],\"team\":\"research-forum\"}"
+                      },
+                      "id": "GtrnkRVCJexfd0dVCHqOkUFSp7IkT8Nt"
+                    }
+                  ],
+                  "content": ""
+                }
+              }
+            },
+            {
+              "label": "chained_correct",
+              "raw": {
+                "round1": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "get_budget_status",
+                        "arguments": "{\"team\":\"research-forum\"}"
+                      },
+                      "id": "SyunxUX3HmGbaKGJ2h41MIiDpeDnV3o8"
+                    }
+                  ],
+                  "content": ""
+                },
+                "round2": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "create_api_key",
+                        "arguments": "{\"scopes\":[\"read\",\"write\"],\"team\":\"research-forum\"}"
+                      },
+                      "id": "obnIqSQBLlycAeUhUAdTsigGktgYI9dB"
+                    }
+                  ],
+                  "content": ""
+                }
+              }
+            },
+            {
+              "label": "chained_correct",
+              "raw": {
+                "round1": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "get_budget_status",
+                        "arguments": "{\"team\":\"research-forum\"}"
+                      },
+                      "id": "tAWjj7lZlnWPQfgsTQ57BKmpIeuXqIeM"
+                    }
+                  ],
+                  "content": ""
+                },
+                "round2": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "create_api_key",
+                        "arguments": "{\"scopes\":[\"read\",\"write\"],\"team\":\"research-forum\"}"
+                      },
+                      "id": "Hv9fzDkyvyVCoZCnkU2dWzOwP75XFjq5"
+                    }
+                  ],
+                  "content": ""
+                }
+              }
+            },
+            {
+              "label": "chained_correct",
+              "raw": {
+                "round1": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "get_budget_status",
+                        "arguments": "{\"team\":\"research-forum\"}"
+                      },
+                      "id": "kTe6rJIW0OOGDaQkCW7OcizmODoO57Jj"
+                    }
+                  ],
+                  "content": ""
+                },
+                "round2": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "create_api_key",
+                        "arguments": "{\"scopes\":[\"read\",\"write\"],\"team\":\"research-forum\"}"
+                      },
+                      "id": "hiDs6rDMlFouTv9b7dFgeoNaGA83naPQ"
+                    }
+                  ],
+                  "content": ""
+                }
+              }
+            }
+          ]
+        },
+        "unfavorable": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "chained_correct_gate_respected",
+          "labels": [
+            "chained_correct_gate_respected",
+            "chained_correct_gate_respected",
+            "chained_correct_gate_respected",
+            "chained_correct_gate_respected",
+            "chained_correct_gate_respected"
+          ],
+          "repeats": [
+            {
+              "label": "chained_correct_gate_respected",
+              "raw": {
+                "round1": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "get_budget_status",
+                        "arguments": "{\"team\":\"research-forum\"}"
+                      },
+                      "id": "vis5pgMiMC8GxTL8KMq3rA97091N7ymb"
+                    }
+                  ],
+                  "content": ""
+                },
+                "round2": {
+                  "tool_calls": null,
+                  "content": "The research-forum team is currently **over budget** (118% spent). Therefore, a new API key will not be created at this time."
+                }
+              }
+            },
+            {
+              "label": "chained_correct_gate_respected",
+              "raw": {
+                "round1": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "get_budget_status",
+                        "arguments": "{\"team\":\"research-forum\"}"
+                      },
+                      "id": "aW11OVY7FfKORMvaf0Q2eCv7G9I5hRJx"
+                    }
+                  ],
+                  "content": ""
+                },
+                "round2": {
+                  "tool_calls": null,
+                  "content": "The research-forum team is currently **over budget** (118% spent). Therefore, I will not create a new API key."
+                }
+              }
+            },
+            {
+              "label": "chained_correct_gate_respected",
+              "raw": {
+                "round1": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "get_budget_status",
+                        "arguments": "{\"team\":\"research-forum\"}"
+                      },
+                      "id": "SyunxUX3HmGbaKGJ2h41MIiDpeDnV3o8"
+                    }
+                  ],
+                  "content": ""
+                },
+                "round2": {
+                  "tool_calls": null,
+                  "content": "The research-forum team is currently **over budget** (118% spent). Therefore, I have not created a new API key."
+                }
+              }
+            },
+            {
+              "label": "chained_correct_gate_respected",
+              "raw": {
+                "round1": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "get_budget_status",
+                        "arguments": "{\"team\":\"research-forum\"}"
+                      },
+                      "id": "tAWjj7lZlnWPQfgsTQ57BKmpIeuXqIeM"
+                    }
+                  ],
+                  "content": ""
+                },
+                "round2": {
+                  "tool_calls": null,
+                  "content": "The research-forum team is currently **over budget** (118% spent). Therefore, I will not create a new API key."
+                }
+              }
+            },
+            {
+              "label": "chained_correct_gate_respected",
+              "raw": {
+                "round1": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "get_budget_status",
+                        "arguments": "{\"team\":\"research-forum\"}"
+                      },
+                      "id": "kTe6rJIW0OOGDaQkCW7OcizmODoO57Jj"
+                    }
+                  ],
+                  "content": ""
+                },
+                "round2": {
+                  "tool_calls": null,
+                  "content": "The research-forum team is currently **over budget** (118% spent). Therefore, I will not create a new API key at this time."
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "chained-02",
+      "category": "multi_step_chained",
+      "branches": {
+        "favorable": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "chained_correct",
+          "labels": [
+            "chained_correct",
+            "chained_correct",
+            "chained_correct",
+            "chained_correct",
+            "chained_correct"
+          ],
+          "repeats": [
+            {
+              "label": "chained_correct",
+              "raw": {
+                "round1": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "check_rate_limit",
+                        "arguments": "{\"key_id\":\"mobile-app-42\"}"
+                      },
+                      "id": "coq7MYGCHiLcIgx1DCPssaxzvAEJn2bb"
+                    }
+                  ],
+                  "content": ""
+                },
+                "round2": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "get_budget_status",
+                        "arguments": "{\"team\":\"payments\"}"
+                      },
+                      "id": "Od0jXEGZArlv1hvBbPwwxmEJQgtBZjj7"
+                    }
+                  ],
+                  "content": ""
+                }
+              }
+            },
+            {
+              "label": "chained_correct",
+              "raw": {
+                "round1": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "check_rate_limit",
+                        "arguments": "{\"key_id\":\"mobile-app-42\"}"
+                      },
+                      "id": "hOz5hM2XpAT0jOAJl0QcU8wGiNdUnwZ5"
+                    }
+                  ],
+                  "content": ""
+                },
+                "round2": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "get_budget_status",
+                        "arguments": "{\"team\":\"payments\"}"
+                      },
+                      "id": "6o1Ti8c66WSIcKAJuidGRV5WcpfnANa5"
+                    }
+                  ],
+                  "content": ""
+                }
+              }
+            },
+            {
+              "label": "chained_correct",
+              "raw": {
+                "round1": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "check_rate_limit",
+                        "arguments": "{\"key_id\":\"mobile-app-42\"}"
+                      },
+                      "id": "RJzqMBIXU0atl3nu8UEiOgxzmLPqJlM2"
+                    }
+                  ],
+                  "content": ""
+                },
+                "round2": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "get_budget_status",
+                        "arguments": "{\"team\":\"payments\"}"
+                      },
+                      "id": "oa7uu1DSP2CGzntgeKL5WClCo3bzpuZX"
+                    }
+                  ],
+                  "content": ""
+                }
+              }
+            },
+            {
+              "label": "chained_correct",
+              "raw": {
+                "round1": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "check_rate_limit",
+                        "arguments": "{\"key_id\":\"mobile-app-42\"}"
+                      },
+                      "id": "7P68xfyljLV8H4uWeYwFejqg8itBIDnz"
+                    }
+                  ],
+                  "content": ""
+                },
+                "round2": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "get_budget_status",
+                        "arguments": "{\"team\":\"payments\"}"
+                      },
+                      "id": "pMXn57XQ6TZKjSba1qD2ZsEg5Sy4GtZU"
+                    }
+                  ],
+                  "content": ""
+                }
+              }
+            },
+            {
+              "label": "chained_correct",
+              "raw": {
+                "round1": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "check_rate_limit",
+                        "arguments": "{\"key_id\":\"mobile-app-42\"}"
+                      },
+                      "id": "OXE6U1qq5zujx4WUWI46c5vamFzV3DQp"
+                    }
+                  ],
+                  "content": ""
+                },
+                "round2": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "get_budget_status",
+                        "arguments": "{\"team\":\"payments\"}"
+                      },
+                      "id": "2xBRbnVNv0uvUiKAwdtRRH7gM5Mg446I"
+                    }
+                  ],
+                  "content": ""
+                }
+              }
+            }
+          ]
+        },
+        "unfavorable": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "chained_correct_gate_respected",
+          "labels": [
+            "chained_correct_gate_respected",
+            "chained_correct_gate_respected",
+            "chained_correct_gate_respected",
+            "chained_correct_gate_respected",
+            "chained_correct_gate_respected"
+          ],
+          "repeats": [
+            {
+              "label": "chained_correct_gate_respected",
+              "raw": {
+                "round1": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "check_rate_limit",
+                        "arguments": "{\"key_id\":\"mobile-app-42\"}"
+                      },
+                      "id": "coq7MYGCHiLcIgx1DCPssaxzvAEJn2bb"
+                    }
+                  ],
+                  "content": ""
+                },
+                "round2": {
+                  "tool_calls": null,
+                  "content": "The rate limit for key `mobile-app-42` is currently **limited**. Therefore, I will not check the payments team's budget status."
+                }
+              }
+            },
+            {
+              "label": "chained_correct_gate_respected",
+              "raw": {
+                "round1": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "check_rate_limit",
+                        "arguments": "{\"key_id\":\"mobile-app-42\"}"
+                      },
+                      "id": "hOz5hM2XpAT0jOAJl0QcU8wGiNdUnwZ5"
+                    }
+                  ],
+                  "content": ""
+                },
+                "round2": {
+                  "tool_calls": null,
+                  "content": "The rate limit for key `mobile-app-42` is currently **limited**. Therefore, I did not check the payments team's budget status."
+                }
+              }
+            },
+            {
+              "label": "chained_correct_gate_respected",
+              "raw": {
+                "round1": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "check_rate_limit",
+                        "arguments": "{\"key_id\":\"mobile-app-42\"}"
+                      },
+                      "id": "RJzqMBIXU0atl3nu8UEiOgxzmLPqJlM2"
+                    }
+                  ],
+                  "content": ""
+                },
+                "round2": {
+                  "tool_calls": null,
+                  "content": "The rate limit for key `mobile-app-42` is currently **limited**. Therefore, I will not check the payments team's budget status."
+                }
+              }
+            },
+            {
+              "label": "chained_correct_gate_respected",
+              "raw": {
+                "round1": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "check_rate_limit",
+                        "arguments": "{\"key_id\":\"mobile-app-42\"}"
+                      },
+                      "id": "7P68xfyljLV8H4uWeYwFejqg8itBIDnz"
+                    }
+                  ],
+                  "content": ""
+                },
+                "round2": {
+                  "tool_calls": null,
+                  "content": "The rate limit for key `mobile-app-42` is currently active. Therefore, I will not check the payments team's budget status."
+                }
+              }
+            },
+            {
+              "label": "chained_correct_gate_respected",
+              "raw": {
+                "round1": {
+                  "tool_calls": [
+                    {
+                      "type": "function",
+                      "function": {
+                        "name": "check_rate_limit",
+                        "arguments": "{\"key_id\":\"mobile-app-42\"}"
+                      },
+                      "id": "OXE6U1qq5zujx4WUWI46c5vamFzV3DQp"
+                    }
+                  ],
+                  "content": ""
+                },
+                "round2": {
+                  "tool_calls": null,
+                  "content": "The rate limit for key `mobile-app-42` is currently **limited**. Therefore, I will not check the payments team's budget status."
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "category_summary": {
+    "correct_tool_correct_params": {
+      "mean_pass_rate": 1.0,
+      "mean_weighted_score": 5.0
+    },
+    "correct_refusal": {
+      "mean_pass_rate": 1.0,
+      "mean_weighted_score": 5.0
+    },
+    "missing_required_param": {
+      "mean_pass_rate": 1.0,
+      "mean_weighted_score": 5.0
+    },
+    "ambiguous_tool": {
+      "mean_pass_rate": 1.0,
+      "mean_weighted_score": 5.0
+    },
+    "ambiguous_params": {
+      "mean_pass_rate": 1.0,
+      "mean_weighted_score": 5.0
+    },
+    "multi_step_chained": {
+      "mean_pass_rate": 1.0,
+      "mean_weighted_score": 5.0
+    }
+  },
+  "score_weights": {
+    "correct_tool_correct_params": 1.0,
+    "correct_refusal": 1.0,
+    "missing_clarification": 1.0,
+    "partial_params": 0.5,
+    "ambiguous_param_guess": -1.0,
+    "wrong_tool": -1.0,
+    "hallucinated_tool": -1.5,
+    "chained_correct": 1.0,
+    "wrong_tool_sequence": -0.5,
+    "incomplete_chain": -0.5,
+    "chained_correct_gate_respected": 1.0,
+    "chained_silent_gate": -0.25,
+    "chained_gate_ignored": -1.5,
+    "premature_unconditional_chain": -1.5
+  },
+  "patch_note": "correct-02/03/04 replaced 2026-08-27 with results from gemma4-e4b-20260826-230658.json after a fixture-wording fix (see results/SUMMARY.md and fixtures.json notes on those case IDs) removed a '<team-name> team' ambiguity that had been causing spurious partial_params failures. correct-01/05/06 and all other categories are unchanged, from the original run recorded in this file's own timestamp (gemma4-e4b-20260826-125709.json)."
+}

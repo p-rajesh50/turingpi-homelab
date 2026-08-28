@@ -1,0 +1,337 @@
+{
+  "model": "gemma4-e2b",
+  "base_url": "http://10.0.0.50:8082",
+  "timestamp": "20260826-230245",
+  "repeats": 5,
+  "temperature": 0.6,
+  "top_p": 0.95,
+  "request_timeout": 180,
+  "case_ids_filter": "correct-02,correct-03,correct-04",
+  "cases": [
+    {
+      "case_id": "correct-02",
+      "category": "correct_tool_correct_params",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_tool_correct_params",
+          "labels": [
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params"
+          ],
+          "repeats": [
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"period\":\"Q2 2026\",\"team\":\"payments\"}"
+                    },
+                    "id": "M9aZ5kAAj3Try3Dd8QUE3OqzBembdXHq"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"period\":\"Q2 2026\",\"team\":\"payments\"}"
+                    },
+                    "id": "1PUo4KQxKZ2nJ95nsCysrpWJUOU1xmFP"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"period\":\"Q2 2026\",\"team\":\"payments\"}"
+                    },
+                    "id": "wfrLUWoDYZSh5kZEmc9BlUhbR9XCW9gj"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"period\":\"Q2 2026\",\"team\":\"payments\"}"
+                    },
+                    "id": "VKrPgBJ2dPEjUYjqYRAnPr9Oj33Q9OS4"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"period\":\"Q2 2026\",\"team\":\"payments\"}"
+                    },
+                    "id": "6oy5riNQEc6cKEMBMzjSmwqLFADAsmhy"
+                  }
+                ],
+                "content": ""
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "correct-03",
+      "category": "correct_tool_correct_params",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_tool_correct_params",
+          "labels": [
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params"
+          ],
+          "repeats": [
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"scopes\":[\"read\",\"write\"],\"team\":\"analytics\"}"
+                    },
+                    "id": "jBRND53ZdcQxh82gQ5tUofJ7GgiHvIc1"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"scopes\":[\"read\",\"write\"],\"team\":\"analytics\"}"
+                    },
+                    "id": "FYpEcyizL24ebmxzOXZn0TjZ0GwEDZKZ"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"scopes\":[\"read\",\"write\"],\"team\":\"analytics\"}"
+                    },
+                    "id": "trsuYEZdTuhzVgS8nIkY0VI24vVyxNdv"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"scopes\":[\"read\",\"write\"],\"team\":\"analytics\"}"
+                    },
+                    "id": "YToZ5W3KWJ6vakEnZei45U0SpCAu46TB"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"scopes\":[\"read\",\"write\"],\"team\":\"analytics\"}"
+                    },
+                    "id": "aM2QFUM1pT57TUU8XIdU6fF8id3pfyXs"
+                  }
+                ],
+                "content": ""
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "correct-04",
+      "category": "correct_tool_correct_params",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_tool_correct_params",
+          "labels": [
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params"
+          ],
+          "repeats": [
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"scopes\":[\"admin\"],\"team\":\"infra\"}"
+                    },
+                    "id": "qXcSzt4W9kIhzkIIz9M83L9MKfYCJ2P8"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"scopes\":[\"admin\"],\"team\":\"infra\"}"
+                    },
+                    "id": "WNgwRL4BcXRTfUpF8W8oz6CpYTKMaUbz"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"scopes\":[\"admin\"],\"team\":\"infra\"}"
+                    },
+                    "id": "d9dh2TjmBbC7PfGMoy0IcurlwW7bTBYw"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"scopes\":[\"admin\"],\"team\":\"infra\"}"
+                    },
+                    "id": "Wb1qmvemeI6XvbmpEGMn0UPJ97sWPSXL"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"scopes\":[\"admin\"],\"team\":\"infra\"}"
+                    },
+                    "id": "7iG7LPIEErqQHuTGfzOpgFehnbnnJxVq"
+                  }
+                ],
+                "content": ""
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "category_summary": {
+    "correct_tool_correct_params": {
+      "mean_pass_rate": 1.0,
+      "mean_weighted_score": 5.0
+    }
+  },
+  "score_weights": {
+    "correct_tool_correct_params": 1.0,
+    "correct_refusal": 1.0,
+    "missing_clarification": 1.0,
+    "partial_params": 0.5,
+    "ambiguous_param_guess": -1.0,
+    "wrong_tool": -1.0,
+    "hallucinated_tool": -1.5,
+    "chained_correct": 1.0,
+    "wrong_tool_sequence": -0.5,
+    "incomplete_chain": -0.5,
+    "chained_correct_gate_respected": 1.0,
+    "chained_silent_gate": -0.25,
+    "chained_gate_ignored": -1.5,
+    "premature_unconditional_chain": -1.5
+  }
+}

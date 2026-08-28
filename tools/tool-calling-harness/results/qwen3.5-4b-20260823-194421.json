@@ -1,0 +1,670 @@
+{
+  "model": "qwen3.5-4b",
+  "base_url": "http://10.0.0.50:8081",
+  "timestamp": "20260823-194421",
+  "repeats": 5,
+  "temperature": 0.6,
+  "top_p": 0.95,
+  "cases": [
+    {
+      "case_id": "correct-01",
+      "category": "correct_tool_correct_params",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_tool_correct_params",
+          "labels": [
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "correct-02",
+      "category": "correct_tool_correct_params",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_tool_correct_params",
+          "labels": [
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params"
+          ],
+          "repeats": [
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"team\":\"payments\",\"period\":\"Q2 2026\"}"
+                    },
+                    "id": "H2LpDGBpXyMLPw5bgBGbne9bcD3828z9"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"team\":\"payments\",\"period\":\"Q2 2026\"}"
+                    },
+                    "id": "YEwstAkE5Mm1RdCrthc0chi3BSl0Wd7U"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"team\":\"payments\",\"period\":\"Q2 2026\"}"
+                    },
+                    "id": "gpqVfHtEn1dgwIPje5oFKvx8Ctwmf0Gf"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"team\":\"payments\",\"period\":\"Q2 2026\"}"
+                    },
+                    "id": "3FPlUtx5RTwQ0UJ0qDvdfFZhxIS8ATrG"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"team\":\"payments\",\"period\":\"Q2 2026\"}"
+                    },
+                    "id": "af01iBwnxZl53At0ZR6QBKp9vTtUwTpE"
+                  }
+                ],
+                "content": ""
+              }
+            }
+          ],
+          "retested_from": "qwen3.5-4b-20260826-225848.json"
+        }
+      }
+    },
+    {
+      "case_id": "correct-03",
+      "category": "correct_tool_correct_params",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_tool_correct_params",
+          "labels": [
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params"
+          ],
+          "repeats": [
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"team\":\"analytics\",\"scopes\":[\"read\", \"write\"]}"
+                    },
+                    "id": "pOyDbuyhrnd9byyJm39Qz9Ke6XzlOCKe"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"team\":\"analytics\",\"scopes\":[\"read\", \"write\"]}"
+                    },
+                    "id": "vIkkp8UaMTT5koa73Nj66xDqOqYe2jRr"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"team\":\"analytics\",\"scopes\":[\"read\", \"write\"]}"
+                    },
+                    "id": "jHJvgDuNXQn3tahS2wMW3xzGrcVPVAky"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"team\":\"analytics\",\"scopes\":[\"read\", \"write\"]}"
+                    },
+                    "id": "ugBd81FQ4vBeZNc2y2pbLMID9UqZFUjZ"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"team\":\"analytics\",\"scopes\":[\"read\", \"write\"]}"
+                    },
+                    "id": "voBhvfZcw4o9BTZsKq9YTJr3l3KaRQo4"
+                  }
+                ],
+                "content": ""
+              }
+            }
+          ],
+          "retested_from": "qwen3.5-4b-20260826-225848.json"
+        }
+      }
+    },
+    {
+      "case_id": "correct-04",
+      "category": "correct_tool_correct_params",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_tool_correct_params",
+          "labels": [
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params"
+          ],
+          "repeats": [
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"team\":\"infra\",\"scopes\":[\"admin\"]}"
+                    },
+                    "id": "wHdC69YI3lehCRFofvMrLJfb3otBamtE"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"team\":\"infra\",\"scopes\":[\"admin\"]}"
+                    },
+                    "id": "3DIMXsOyqcbOT1i2qaS46bCNn0aMRBeT"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"team\":\"infra\",\"scopes\":[\"admin\"]}"
+                    },
+                    "id": "OAKSUCxHA3xfH4cXpK1UWKqFz3jX0y9T"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"team\":\"infra\",\"scopes\":[\"admin\"]}"
+                    },
+                    "id": "6lmHgnnK87C9ZnhMlKQcso4ZcMAXftmQ"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"team\":\"infra\",\"scopes\":[\"admin\"]}"
+                    },
+                    "id": "tTMBWsvoPt4kj5KR7rKSRo1sDnunSTNc"
+                  }
+                ],
+                "content": ""
+              }
+            }
+          ],
+          "retested_from": "qwen3.5-4b-20260826-225848.json"
+        }
+      }
+    },
+    {
+      "case_id": "correct-05",
+      "category": "correct_tool_correct_params",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_tool_correct_params",
+          "labels": [
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "correct-06",
+      "category": "correct_tool_correct_params",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_tool_correct_params",
+          "labels": [
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "refusal-01",
+      "category": "correct_refusal",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_refusal",
+          "labels": [
+            "correct_refusal",
+            "correct_refusal",
+            "correct_refusal",
+            "correct_refusal",
+            "correct_refusal"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "refusal-02",
+      "category": "correct_refusal",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_refusal",
+          "labels": [
+            "correct_refusal",
+            "correct_refusal",
+            "correct_refusal",
+            "correct_refusal",
+            "correct_refusal"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "refusal-03",
+      "category": "correct_refusal",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 0.4,
+          "weighted_score": -1.0,
+          "dominant_label": "wrong_tool",
+          "labels": [
+            "correct_refusal",
+            "correct_refusal",
+            "wrong_tool",
+            "wrong_tool",
+            "wrong_tool"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "refusal-04",
+      "category": "correct_refusal",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_refusal",
+          "labels": [
+            "correct_refusal",
+            "correct_refusal",
+            "correct_refusal",
+            "correct_refusal",
+            "correct_refusal"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "missing-01",
+      "category": "missing_required_param",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 0.2,
+          "weighted_score": 3.0,
+          "dominant_label": "partial_params",
+          "labels": [
+            "partial_params",
+            "partial_params",
+            "missing_clarification",
+            "partial_params",
+            "partial_params"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "missing-02",
+      "category": "missing_required_param",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 0.8,
+          "weighted_score": 4.5,
+          "dominant_label": "missing_clarification",
+          "labels": [
+            "missing_clarification",
+            "missing_clarification",
+            "partial_params",
+            "missing_clarification",
+            "missing_clarification"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "missing-03",
+      "category": "missing_required_param",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 0.4,
+          "weighted_score": 3.5,
+          "dominant_label": "partial_params",
+          "labels": [
+            "partial_params",
+            "missing_clarification",
+            "missing_clarification",
+            "partial_params",
+            "partial_params"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "missing-04",
+      "category": "missing_required_param",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 0.6,
+          "weighted_score": 4.0,
+          "dominant_label": "missing_clarification",
+          "labels": [
+            "missing_clarification",
+            "missing_clarification",
+            "missing_clarification",
+            "partial_params",
+            "partial_params"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "ambiguous-01",
+      "category": "ambiguous_tool",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 0.0,
+          "weighted_score": -5.0,
+          "dominant_label": "wrong_tool",
+          "labels": [
+            "wrong_tool",
+            "wrong_tool",
+            "wrong_tool",
+            "wrong_tool",
+            "wrong_tool"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "ambiguous-02",
+      "category": "ambiguous_params",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "missing_clarification",
+          "labels": [
+            "missing_clarification",
+            "missing_clarification",
+            "missing_clarification",
+            "missing_clarification",
+            "missing_clarification"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "chained-01",
+      "category": "multi_step_chained",
+      "branches": {
+        "favorable": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "chained_correct",
+          "labels": [
+            "chained_correct",
+            "chained_correct",
+            "chained_correct",
+            "chained_correct",
+            "chained_correct"
+          ]
+        },
+        "unfavorable": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "chained_correct_gate_respected",
+          "labels": [
+            "chained_correct_gate_respected",
+            "chained_correct_gate_respected",
+            "chained_correct_gate_respected",
+            "chained_correct_gate_respected",
+            "chained_correct_gate_respected"
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "chained-02",
+      "category": "multi_step_chained",
+      "branches": {
+        "favorable": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "chained_correct",
+          "labels": [
+            "chained_correct",
+            "chained_correct",
+            "chained_correct",
+            "chained_correct",
+            "chained_correct"
+          ]
+        },
+        "unfavorable": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "chained_correct_gate_respected",
+          "labels": [
+            "chained_correct_gate_respected",
+            "chained_correct_gate_respected",
+            "chained_correct_gate_respected",
+            "chained_correct_gate_respected",
+            "chained_correct_gate_respected"
+          ]
+        }
+      }
+    }
+  ],
+  "category_summary": {
+    "correct_tool_correct_params": {
+      "mean_pass_rate": 1.0,
+      "mean_weighted_score": 5.0
+    },
+    "correct_refusal": {
+      "mean_pass_rate": 0.85,
+      "mean_weighted_score": 3.5
+    },
+    "missing_required_param": {
+      "mean_pass_rate": 0.5,
+      "mean_weighted_score": 3.75
+    },
+    "ambiguous_tool": {
+      "mean_pass_rate": 0.0,
+      "mean_weighted_score": -5.0
+    },
+    "ambiguous_params": {
+      "mean_pass_rate": 1.0,
+      "mean_weighted_score": 5.0
+    },
+    "multi_step_chained": {
+      "mean_pass_rate": 1.0,
+      "mean_weighted_score": 5.0
+    }
+  },
+  "score_weights": {
+    "correct_tool_correct_params": 1.0,
+    "correct_refusal": 1.0,
+    "missing_clarification": 1.0,
+    "partial_params": 0.5,
+    "ambiguous_param_guess": -1.0,
+    "wrong_tool": -1.0,
+    "hallucinated_tool": -1.5,
+    "chained_correct": 1.0,
+    "wrong_tool_sequence": -0.5,
+    "incomplete_chain": -0.5,
+    "chained_correct_gate_respected": 1.0,
+    "chained_silent_gate": -0.25,
+    "chained_gate_ignored": -1.5,
+    "premature_unconditional_chain": -1.5
+  },
+  "patch_note": "correct-02/03/04 replaced 2026-08-27 with results from qwen3.5-4b-20260826-225848.json after a fixture-wording fix (see results/SUMMARY.md and fixtures.json notes on those case IDs) removed a '<team-name> team' ambiguity that had been causing spurious partial_params failures. correct-01/05/06 and all other categories are unchanged, from the original run recorded in this file's own timestamp (qwen3.5-4b-20260823-194421.json)."
+}

@@ -995,6 +995,173 @@ design in two:
   `GET /api/v1/admin/cron` with the narrow token returns `403` (no admin
   scope, as intended).
 
+**August 23-27, 2026 — Phase 1: llama.cpp server mode + model comparison on orin-nx and orin-nano, agentic tool-calling harness built and run:**
+
+Goal: stand up llama.cpp in OpenAI-compatible server mode on both
+standalone Jetson hosts (`orin-nx` 10.0.0.14, `orin-nano` 10.0.0.50 —
+inventory group `jetson_llm`, distinct from the removed/deferred
+in-cluster `orin_nx` slot), pull real candidate models, and prove
+tool-calling reliability with a real test harness before wiring anything
+into LiteLLM. Phase 0 (CUDA build only, TinyLlama CLI smoke test) was
+already done in an earlier session; this phase added real target models,
+server mode, and the comparison harness on top of the existing
+`ansible/roles/llama-cpp-jetson/` role.
+
+**Note: `orin-nx` (10.0.0.14) is back in active use** — **confirmed by the
+user** to be the same physical Orin NX module originally intended for the
+TuringPi cluster. It was tried in Node/Slot 1, then Slot 2, during
+earlier troubleshooting, and ultimately settled in **Slot 3** (the slot
+with the faulty DSA switch port — see CRITICAL HARDWARE NOTES below),
+where it now runs **standalone** (`jetson_llm` inventory group, its own
+llama.cpp build/server), **not joined to K3s**. See the updated Hardware
+table below.
+
+**Models deployed, live-verified via HF file listing + `curl -sfI -L`
+before any download (fail-fast pre-flight, no `-hf` auto-resolution)**:
+- `orin-nx` (16GB): `gemma4-12b` (`unsloth/gemma-4-12b-it-GGUF`,
+  UD-Q4_K_XL, 7.37GB, port 8081) and `qwen3-8b`
+  (`bartowski/Qwen_Qwen3-8B-GGUF`, Q4_K_M, 5.03GB, port 8082) — mutually
+  exclusive, only one runs at a time.
+- `orin-nano` (8GB, tighter): `qwen3.5-4b`
+  (`bartowski/Qwen_Qwen3.5-4B-GGUF`, Q4_K_M, 3.01GB, port 8081),
+  `gemma4-e2b` (`unsloth/gemma-4-E2B-it-GGUF`, Q4_K_M, 3.11GB, port 8082),
+  `gemma4-e4b` (`unsloth/gemma-4-E4B-it-GGUF`, Q4_K_M, 4.98GB, port 8083)
+  — three-way mutually exclusive.
+
+**Systemd server mode added to the role**: each model runs as
+`llama-server-<name>.service` (`llama-server --host 0.0.0.0 --port <port>
+-ngl 99 --jinja`), deployed via a new
+`templates/llama-server.service.j2` + `tasks/deploy-model-server.yml`
+(async download with a 1hr `timeout`/2hr `async` window — Cluster 1's
+shared 1GbE NIC/VLAN makes multi-GB transfers slow — and an idempotency
+guard checking `systemctl is-active` + `/health` before restarting
+anything). Mutual exclusion is enforced two ways: `llama_active_model_nx`
+/ `llama_active_model_nano` picks the boot-time default (intent only),
+and each unit's `Conflicts=` directive against every other unit on the
+same host (`conflicts_with` list in `defaults/main.yml`) is the actual
+enforcement — **live-verified** on both the NX pair and, after adding the
+Nano trio, explicitly proven 3-way (starting any one of the three Nano
+units stops *both* others, not just one — the failure mode most likely
+from an incomplete `conflicts_with` list).
+
+**gemma4-e4b OOM'd on the Nano** (`cudaMalloc failed: out of memory`
+during KV-cache buffer allocation, crash-looping every restart) — root
+cause was llama-server defaulting to the model's native (huge) training
+context rather than the model's ~5GB weight size; fixed with an explicit
+`-c 4096` cap in `extra_args` (harness fixtures are short, don't need
+more). Confirmed stable 65+s under load before trusting it.
+
+**Tool-calling harness** (`tools/tool-calling-harness/`, new,
+stdlib-only Python, not an Ansible role): 18 fixtures across 6 categories
+modeled on a FinOps-MCP governance shape (`get_budget_status`,
+`create_api_key`, `check_rate_limit`), `--repeats 5`, 14 classification
+labels with explicit weights (`hallucinated_tool` and
+`chained_gate_ignored` weighted worst — a model that silently acts on bad
+information is worse than one that visibly picks the wrong tool). The two
+`multi_step_chained` cases run a favorable + unfavorable branch each
+(inject a synthetic first-tool result that either satisfies or fails the
+stated condition) specifically to catch a model that chains tool calls
+unconditionally without waiting on/reasoning about the first result — the
+most operationally dangerous failure mode for a budget-gating use case.
+Every response's raw `tool_calls`/`content` is persisted per repeat in the
+results JSON (added mid-investigation) so a surprising score can be
+debugged from saved data later without re-querying a model that may no
+longer be running.
+
+**Investigation caught and fixed a universal fixture-wording bug**: all
+six models sometimes appended the literal word "team" to a team-name
+argument (e.g. `team="payments team"`) when the prompt read "...for the
+`X` team" — never `wrong_tool`/`hallucinated_tool`, always a benign
+string-formatting artifact. Rewording three fixtures to `team "X"` (quoted)
+fully closed the gap to 1.00 across all six models; the three affected
+prior-run result JSONs were patched with the retest data rather than
+re-running the full 18-fixture suite, each carrying a `patch_note` +
+`retested_from` field for provenance. Also confirmed (not assumed) that a
+1.00 on the `ambiguous_tool` fixture for `gemma4-e2b`/`gemma4-e4b` was
+genuine clarifying behavior (5/5 real clarifying questions, no classifier
+loophole exists for a confident guess to score as a pass) — not a lucky
+artifact.
+
+**Decision** (`tools/tool-calling-harness/results/SUMMARY.md`): **NX →
+`gemma4-12b`** — top/tied-top on every well-sampled category, clean on
+both governance-relevant ones; `qwen3-8b` kept installed as a hedge but
+not default, given a well-evidenced 60% rate of firing both chained tool
+calls unconditionally in round 1 with zero reasoning trace acknowledging
+the prompt's "if" condition (a materially worse failure mode than a
+wrong-tool pick). **Nano → `gemma4-e2b`** (promoted from the previously
+recommended `qwen3.5-4b`, **already applied live** —
+`llama_active_model_nano: gemma4-e2b` in `defaults/main.yml`, re-run and
+verified) — ties `gemma4-e4b` on every harness score but runs at native
+context with no OOM risk, and clearly beats `qwen3.5-4b` on
+`correct_refusal`/`missing_required_param`/`ambiguous_tool`.
+
+**Idempotency fixes** (found because switching the Nano's active model
+via a role re-run unexpectedly re-downloaded all its already-present
+multi-GB models and re-triggered a full CUDA rebuild):
+- `get_url`'s `checksum:` param now used for all 5 models' primary
+  source (SHA256 from HF's `X-Linked-ETag` header, cross-checked against
+  `sha256sum` of the already-downloaded files) — re-runs now skip
+  re-downloading a file that's already correct. Verified live: download
+  tasks dropped from 300-700s each to ~31s (checksum-only, zero bytes
+  transferred — confirmed via unchanged file `mtime`).
+- Auditing this also caught **3 of 5 models' fallback repos were
+  silently broken** (404 — `unsloth/Qwen3.5-4B-GGUF` and both of
+  `gemma4-12b`'s fallbacks assumed the primary's filename, which doesn't
+  match that uploader's actual naming convention) — never caught because
+  the primary source has always been available. All 5 fallbacks
+  re-verified and fixed with correct per-repo filenames.
+- The *build* re-triggering was separately confirmed (via `git reflog` on
+  the host, twice) to be genuine upstream `master` movement, not a bug —
+  `llama_cpp_version` was floating on `master`, and llama.cpp is a very
+  active repo. **Pinned to a fixed commit**
+  (`ca3d5a3e10d53f7ea672cb9b6178faca3e2807bc`, the commit that already
+  built and passed verification) for reproducibility ahead of client demo
+  prep — upgrading this SHA is now a deliberate action, not something
+  that happens silently on every playbook run.
+
+**Idempotency follow-up (same day)**: two smaller re-run costs remained
+after the fixes above — the TinyLlama smoke-test model (~405MB, no
+`checksum:` guard, re-downloaded every run) and the "Build llama.cpp"
+task's hardcoded `changed_when: true` (always reported changed regardless
+of whether `cmake --build`'s incremental `make` actually compiled
+anything). Fixed:
+- `llama_test_model_sha256` added and wired into the TinyLlama `get_url`
+  task the same way as the target models — confirmed live: task went
+  from ~65s to ~2s.
+- `changed_when` on the Build task now checks for `Building CXX/C/CUDA
+  object` / `Linking CXX/CUDA` lines in stdout — the actual signal a
+  compiler/linker was invoked, since cmake's Makefile wrapper prints a
+  `[100%] Built target ...` completion line even on a true no-op build
+  (confirmed via a manual re-run showing only `Built target` lines).
+  **This surfaced a real (small) llama.cpp build-system quirk, not a
+  false positive in the fix**: verbose (`-vvv`) output showed the same
+  two lines on every single run, unconditionally —
+  `[99%] Building CXX object app/CMakeFiles/llama-app.dir/__/license.cpp.o`
+  and `[99%] Linking CXX executable ../bin/llama`. The configure step's
+  own log (`-- Generating embedded license file for target: llama-app`)
+  explains why: llama.cpp regenerates `license.cpp` fresh on every
+  `cmake --build` invocation, forcing a real (if tiny) recompile+relink
+  of that one file/target regardless of anything else changing. Not
+  fixable at the Ansible layer without patching llama.cpp's own
+  `CMakeLists.txt` (out of scope). `changed_when` is now accurately
+  reporting real work, just work that's inherent to upstream's own
+  design — residual cost is ~32s/run (relink only), not the original
+  ~30-35 *minutes* from a real full rebuild.
+
+**Net result of all idempotency fixes**: a re-run that changes nothing
+meaningful (e.g. switching which model is active) now takes ~2m50s total
+(dominated by 3× ~31s checksum verification over multi-GB files + the
+~32s unavoidable llama-app relink), down from ~35-40 minutes before any
+of these fixes.
+
+**Not yet done**: LiteLLM wiring for either selected model (explicitly
+deferred until harness results were in), and a couple of open harness
+follow-ups noted in `SUMMARY.md` — the `ambiguous_tool` fixture likely
+has a budget-framing wording lean (all three 0.00-scoring models
+independently guessed the same tool), and `harness.py` gained a
+`--case-ids` flag for targeted re-tests that's worth knowing about for
+future fixture iteration.
+
 ---
 
 ## Hardware — Cluster 1 (TuringPi 2.5)
@@ -1004,9 +1171,9 @@ design in two:
 | BMC | tpi1-bmc | 10.0.0.10 | — | ✅ Static IP, password changed |
 | RK1 | rk1-control | 10.0.0.11 | 1 | ✅ K3s control-plane, Ready |
 | RK1 | rk1-worker-1 | 10.0.0.12 | 2 | ✅ K3s agent, Ready (MOVED from slot 3) |
-| EMPTY | — | — | 3 | ❌ FAULTY DSA switch port — never use |
+| — | — | — | 3 | ❌ FAULTY DSA switch port for K3s/RK1 cluster networking — never assign an RK1 node here. Physically occupied by the standalone Orin NX (see row above), which doesn't use this fabric. |
 | RK1 | rk1-worker-2 | 10.0.0.13 | 4 | ✅ K3s agent, Ready |
-| Orin NX | orin-nx | 10.0.0.14 | — | ⬜ Removed from board entirely, deferred indefinitely |
+| Orin NX | orin-nx | 10.0.0.14 | 3* | ✅ Physically installed in Slot 3 (confirmed by user — tried Slot 1, then 2, before settling here), running **standalone** — NOT joined to K3s, `jetson_llm` inventory group, running llama.cpp CUDA build + llama-server (Phase 1, see August 23-27, 2026 entry above). *Slot 3's DSA switch port is documented faulty for RK1 K3s cluster networking (see row below + CRITICAL HARDWARE NOTES) — this doesn't affect the Orin NX, which is reachable and stable standalone, not participating in that inter-node fabric.* |
 | Jetson Nano | jetson-nano | 10.0.0.15 | — | ⬜ Not yet configured |
 | Jetson Orin Nano | orin-nano | 10.0.0.50 | — | ✅ JetPack 7.2/Ubuntu 24.04 on 1TB NVMe, MAXN_SUPER (67 TOPS), user `raj` |
 
@@ -1014,8 +1181,13 @@ design in two:
 - **Slot 3 DSA switch port is FAULTY** — nodes in slot 3 cannot communicate
   with other nodes. Contact TuringPi support for potential RMA.
 - **rk1-worker-1 was physically moved from slot 3 to slot 2** to work around the fault.
-- **Orin NX module was physically removed from the board** — Jetson Orin setup is
-  deferred indefinitely until it's reinstalled somewhere.
+- **Orin NX module is physically installed in Slot 3** (confirmed by
+  user — tried Slot 1, then Slot 2, during earlier troubleshooting before
+  settling here) and runs **standalone**, not joined to K3s — the faulty
+  DSA switch port above affects RK1-to-RK1 cluster networking, not this
+  device. See the Hardware table above and the August 23-27, 2026 Phase 1
+  entry for what's running on it (llama.cpp server mode, `jetson_llm`
+  inventory group).
 - **NFS SATA SSD** re-homed via a mini-PCIe SATA adapter card in slot 2. Device
   path confirmed `/dev/sda2`.
 
@@ -1030,7 +1202,7 @@ design in two:
 10.0.0.11         rk1-control (slot 1) — also Tailscale subnet router
 10.0.0.12         rk1-worker-1 (slot 2, MOVED from slot 3)
 10.0.0.13         rk1-worker-2 (slot 4)
-10.0.0.14         orin-nx (removed from board, future re-add)
+10.0.0.14         orin-nx — standalone, jetson_llm group, llama.cpp Phase 1 (not the in-cluster TuringPi module, which remains removed/deferred)
 10.0.0.15         jetson-nano (future)
 10.0.0.20         Cluster 2 BMC (tpi2-bmc) — static, confirmed (was 10.0.0.190 DHCP)
 10.0.0.21-24      Cluster 2 CM4 nodes — all 4 (cm4-node-1 through
@@ -1337,7 +1509,11 @@ rk1-control: 100.96.0.102 (subnet router, advertises 10.0.0.0/24,
 │   │   ├── 04-cluster-addons.yml ← MetalLB, Ingress, Grafana, Headlamp, Portainer — LIVE
 │   │   ├── 05-ai-stack.yml      ← LiteLLM — LIVE (others are stub roles)
 │   │   ├── 06-dev-tools.yml     ← Gitea — LIVE
-│   │   ├── 07-jetson-orin.yml   ← Deferred (module removed from board)
+│   │   ├── 07-jetson-orin.yml   ← Not yet run (this is the Ollama/Open WebUI
+│   │   │                          in-cluster role — separate from the
+│   │   │                          standalone llama.cpp Phase 1 work now
+│   │   │                          running on the same physical Orin NX at
+│   │   │                          10.0.0.14, see August 23-27, 2026 entry)
 │   │   ├── 08-jetson-nano.yml   ← Not yet run
 │   │   ├── 09-vault.yml         ← Vault + ESO — LIVE
 │   │   ├── 10-tailscale.yml     ← control-plane only — LIVE
@@ -1381,7 +1557,7 @@ https://portainer.kloud-worx.com  Portainer multi-cluster UI (Access-protected)
 https://truenas.kloud-worx.com    TrueNAS admin UI (Access-protected, live)
 https://prefect.kloud-worx.com    Prefect UI (Access-protected, not deployed yet)
 https://jupyter.kloud-worx.com    JupyterHub (not deployed yet, no Access policy)
-https://llm.kloud-worx.com        Open WebUI (deferred, Orin NX removed from board)
+https://llm.kloud-worx.com        Open WebUI — not deployed (no Open WebUI/ingress wired here; llama-server runs directly on orin-nx/orin-nano LAN ports, see Aug 23-27, 2026 entry)
 ```
 
 Local/direct (MetalLB, LAN only):
@@ -1426,28 +1602,38 @@ http://10.0.0.40/v1   LiteLLM        http://10.0.0.35       MinIO
      writeup and lessons learned. **Longhorn backups are now confirmed
      completing, not just configured.**
 
-2. **Slot 3 / Orin NX Investigation** — re-test slot 3 with the Orin NX
-   installed; the suspected DSA switch-silicon fault may actually have been
-   kubeadm/Tailscale artifacts from the old cluster, not a hardware fault.
-   - Research the correct JetPack version for an Orin NX 16GB on TuringPi.
-   - Flash JetPack on the Orin NX via BMC.
-   - Test basic network connectivity before installing any other software.
-   - Confirm or rule out the DSA hardware fault before committing further
-     work to this slot.
+2. ✅ **Slot 3 / Orin NX Investigation — COMPLETE**: Orin NX is
+   physically installed in Slot 3 (after being tried in Slot 1, then Slot
+   2), confirmed alive, network-reachable (10.0.0.14), and stable running
+   standalone (not joined to K3s, not subject to the DSA switch-port
+   fault which only affects RK1-to-RK1 cluster networking). See the
+   Hardware table and CRITICAL HARDWARE NOTES above, and the August
+   23-27, 2026 Phase 1 entry for the full llama.cpp build/deploy work
+   done on it.
 
-3. **Orin NX as AI Inference Engine** (if slot 3 checks out):
-   - JetPack 6/7 with CUDA/TensorRT/cuDNN.
-   - Ollama with a TensorRT-LLM backend.
-   - Models: Gemma 3 12B, Qwen 3 7B/14B, Nvidia Nemotron 8B.
-   - Whisper large-v3 for speech-to-text.
-   - Wire the LiteLLM gateway to route heavy inference to the Orin NX.
+3. ✅ **Orin NX as AI Inference Engine — COMPLETE (August 23-27, 2026)**:
+   llama.cpp built from source with CUDA, running two real candidate
+   models in OpenAI-compatible server mode (`gemma4-12b` — the selected
+   default — and `qwen3-8b`, kept installed as a hedge), validated via an
+   18-fixture, 6-category tool-calling harness across all 5 Phase 1
+   models (2 on the NX, 3 on the Nano). See the August 23-27, 2026 entry
+   above and `tools/tool-calling-harness/results/SUMMARY.md` for the full
+   comparison and decision. Differs from the original plan below in a few
+   ways worth noting: Ollama/TensorRT-LLM was not used (llama-server
+   directly, OpenAI-compatible endpoint); actual models deployed are
+   Gemma-4-12B-it and Qwen3-8B, not the originally-planned Gemma 3
+   12B/Qwen 3 7B-14B/Nemotron 8B (model families available at the time
+   this item was written have since moved on); Whisper speech-to-text and
+   LiteLLM gateway wiring are **not yet done** — see "Not yet done" in
+   the August 23-27, 2026 entry.
    - ✅ **PostgreSQL for the LiteLLM UI — COMPLETE (July 26, 2026)**:
      deployed via `ansible/roles/postgresql/`, `DATABASE_URL` wired,
      Prisma migration confirmed. LiteLLM UI database features (spend
      tracking, user/team management) are unblocked. Remaining follow-up:
      build teams/budgets for the client FinOps demo ($40/mo standard,
      $200/mo developer).
-   - Benchmark inference performance.
+   - ⬜ Benchmark inference performance — not yet done (the tool-calling
+     harness measured correctness, not throughput/latency).
 
 4. **Move Observability to Jetson Nano** — Prometheus + Grafana + Loki +
    Alertmanager on the Jetson Nano (JetPack 4.6, already supported). Frees

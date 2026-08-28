@@ -1,0 +1,337 @@
+{
+  "model": "qwen3-8b",
+  "base_url": "http://10.0.0.14:8082",
+  "timestamp": "20260826-232040",
+  "repeats": 5,
+  "temperature": 0.6,
+  "top_p": 0.95,
+  "request_timeout": 180,
+  "case_ids_filter": "correct-02,correct-03,correct-04",
+  "cases": [
+    {
+      "case_id": "correct-02",
+      "category": "correct_tool_correct_params",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_tool_correct_params",
+          "labels": [
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params"
+          ],
+          "repeats": [
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"team\": \"payments\", \"period\": \"Q2 2026\"}"
+                    },
+                    "id": "BnYlEmfbiWhNZbcD4P30R8Q0d8uvaCoO"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"team\": \"payments\", \"period\": \"Q2 2026\"}"
+                    },
+                    "id": "OyuCU11dihcZlvs4795bgv7mQjqCFV7o"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"team\": \"payments\", \"period\": \"Q2 2026\"}"
+                    },
+                    "id": "tWEMPQOqhMZstPNoIEP4SPQyDAHpU6xP"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"team\": \"payments\", \"period\": \"Q2 2026\"}"
+                    },
+                    "id": "2DO1UCltb5YqPqD6U8H1MCFQJEbKDgQr"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "get_budget_status",
+                      "arguments": "{\"team\": \"payments\", \"period\": \"Q2 2026\"}"
+                    },
+                    "id": "nd08lCJzWJmJwZDBCKYJTuw3QE0BcZDa"
+                  }
+                ],
+                "content": ""
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "correct-03",
+      "category": "correct_tool_correct_params",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_tool_correct_params",
+          "labels": [
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params"
+          ],
+          "repeats": [
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"team\": \"analytics\", \"scopes\": [\"read\", \"write\"]}"
+                    },
+                    "id": "Wb3EP1mLmc2e7XYxs2H07fTX9oFiIvep"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"team\": \"analytics\", \"scopes\": [\"read\", \"write\"]}"
+                    },
+                    "id": "UEt4t6T2xuhcUZdabPruXfGgAVaVLumQ"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"team\": \"analytics\", \"scopes\": [\"read\", \"write\"]}"
+                    },
+                    "id": "xtT0vaeWQ6QTk8UxBd8V1k7X3XlsdFiN"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"team\": \"analytics\", \"scopes\": [\"read\", \"write\"]}"
+                    },
+                    "id": "8EU54Y8q46tYXnshIvqwPLdNJQN9LaVC"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"team\": \"analytics\", \"scopes\": [\"read\", \"write\"]}"
+                    },
+                    "id": "LS7v1SEWTUmMdEpV9cFtJL7RAcU2UPl6"
+                  }
+                ],
+                "content": ""
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "correct-04",
+      "category": "correct_tool_correct_params",
+      "branches": {
+        "single": {
+          "n": 5,
+          "pass_rate": 1.0,
+          "weighted_score": 5.0,
+          "dominant_label": "correct_tool_correct_params",
+          "labels": [
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params",
+            "correct_tool_correct_params"
+          ],
+          "repeats": [
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"team\": \"infra\", \"scopes\": [\"admin\"]}"
+                    },
+                    "id": "UxCQx8IoIg19Q7MJxfc9osL0P9pqI9dl"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"team\": \"infra\", \"scopes\": [\"admin\"]}"
+                    },
+                    "id": "SHgMhJREigGGOYr9TWjfWPY5lRiDEs9l"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"team\": \"infra\", \"scopes\": [\"admin\"]}"
+                    },
+                    "id": "W4AFTY6R0DB1dyK6FYfah9Kf4DXMTqbI"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"team\": \"infra\", \"scopes\": [\"admin\"]}"
+                    },
+                    "id": "f7212pGOyuZmYLkQjCow1752429BhJyz"
+                  }
+                ],
+                "content": ""
+              }
+            },
+            {
+              "label": "correct_tool_correct_params",
+              "raw": {
+                "tool_calls": [
+                  {
+                    "type": "function",
+                    "function": {
+                      "name": "create_api_key",
+                      "arguments": "{\"team\": \"infra\", \"scopes\": [\"admin\"]}"
+                    },
+                    "id": "cFGxjVdLT01kBcV7a6h5Ajxg1ZVOpwgD"
+                  }
+                ],
+                "content": ""
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "category_summary": {
+    "correct_tool_correct_params": {
+      "mean_pass_rate": 1.0,
+      "mean_weighted_score": 5.0
+    }
+  },
+  "score_weights": {
+    "correct_tool_correct_params": 1.0,
+    "correct_refusal": 1.0,
+    "missing_clarification": 1.0,
+    "partial_params": 0.5,
+    "ambiguous_param_guess": -1.0,
+    "wrong_tool": -1.0,
+    "hallucinated_tool": -1.5,
+    "chained_correct": 1.0,
+    "wrong_tool_sequence": -0.5,
+    "incomplete_chain": -0.5,
+    "chained_correct_gate_respected": 1.0,
+    "chained_silent_gate": -0.25,
+    "chained_gate_ignored": -1.5,
+    "premature_unconditional_chain": -1.5
+  }
+}

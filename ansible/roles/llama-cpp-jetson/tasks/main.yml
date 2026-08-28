@@ -66,12 +66,23 @@
     creates: "{{ llama_cpp_dest }}/build/Makefile"
   become: false
 
+# changed_when inspects stdout for actual compiler/linker invocations rather
+# than assuming every run changed something — cmake's Makefile wrapper always
+# prints a "[100%] Built target ..." completion line even on a true no-op
+# incremental build, so that alone can't be used as the changed signal; only
+# "Building ... object" / "Linking ..." lines indicate real work was done.
 - name: Build llama.cpp
   ansible.builtin.command:
     cmd: "cmake --build build --config Release -j {{ llama_build_parallelism }}"
     chdir: "{{ llama_cpp_dest }}"
   become: false
-  changed_when: true
+  register: llama_build_result
+  changed_when: >-
+    'Building CXX object' in llama_build_result.stdout or
+    'Building C object' in llama_build_result.stdout or
+    'Building CUDA object' in llama_build_result.stdout or
+    'Linking CXX' in llama_build_result.stdout or
+    'Linking CUDA' in llama_build_result.stdout
   async: 7200
   poll: 30
 
@@ -87,6 +98,7 @@
     url: "{{ llama_test_model_url }}"
     dest: "{{ llama_test_model_path }}"
     mode: "0644"
+    checksum: "sha256:{{ llama_test_model_sha256 }}"
   become: false
 
 - name: Run CUDA inference smoke test
@@ -115,3 +127,70 @@
       - "CUDA architecture: {{ cuda_arch }}"
       - "Build parallelism: {{ llama_build_parallelism }}"
       - "CUDA verification: found 1 CUDA devices — build is GPU-accelerated"
+
+# ── Phase 1: server-mode models ──────────────────────────────────────────────
+# orin-nx gets llama_models_orin_nx (Gemma-4-12B + Qwen3-8B, mutually
+# exclusive via systemd Conflicts=), orin-nano gets llama_models_orin_nano
+# (qwen3.5-4b + gemma4-e2b + gemma4-e4b, three-way mutually exclusive via
+# the same mechanism). llama_default_active_units decides which unit(s)
+# this task set enables/starts by default — always exactly one unit per
+# host (llama_active_model_nx / llama_active_model_nano); systemd
+# Conflicts= is what actually *enforces* exclusivity if someone starts a
+# different one later (see templates/llama-server.service.j2 and
+# README.md).
+- name: Set this host's model list and default-active unit(s)
+  ansible.builtin.set_fact:
+    llama_models: "{{ llama_models_orin_nx if inventory_hostname == 'orin-nx' else llama_models_orin_nano }}"
+    llama_default_active_units: >-
+      {{ [llama_active_model_nx] if inventory_hostname == 'orin-nx'
+         else [llama_active_model_nano] }}
+
+# HF's resolve/main/<file> URL 302-redirects to a signed xet-bridge CDN URL —
+# `-L` is required or a healthy file looks unreachable. Tries the primary
+# repo first, then each fallback_repos entry in order; fails the play with a
+# clear message if every source 401s/404s, before any multi-GB transfer
+# starts. fallback_repos entries are {repo, filename} objects — filename
+# defaults to the primary entry's filename when omitted, but must NOT be
+# assumed identical across repos (e.g. ggml-org's gemma-4-E2B/E4B-it-GGUF
+# repos only publish Q4_0, never the primary's Q4_K_M).
+- name: Pre-flight check each model's download URL (fail fast, try fallbacks)
+  ansible.builtin.shell: |
+    set -o pipefail
+    urls="https://huggingface.co/{{ item.repo }}/resolve/main/{{ item.filename }}{% for fb in item.fallback_repos %} https://huggingface.co/{{ fb.repo }}/resolve/main/{{ fb.filename | default(item.filename) }}{% endfor %}"
+    for u in $urls; do
+      if curl -sfI -L -o /dev/null "$u"; then
+        echo "$u"
+        exit 0
+      fi
+    done
+    echo "All sources failed for {{ item.name }} ({{ item.filename }}): $urls" >&2
+    exit 1
+  args:
+    executable: /bin/bash
+  register: llama_url_check
+  changed_when: false
+  loop: "{{ llama_models }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Record resolved download URL per model
+  ansible.builtin.set_fact:
+    llama_resolved_urls: "{{ (llama_resolved_urls | default({})) | combine({result.item.name: result.stdout}) }}"
+  loop: "{{ llama_url_check.results }}"
+  loop_control:
+    loop_var: result
+    label: "{{ result.item.name }}"
+
+- name: Deploy, download, and start each model server
+  ansible.builtin.include_tasks: deploy-model-server.yml
+  loop: "{{ llama_models }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Print server-mode summary
+  ansible.builtin.debug:
+    msg: >-
+      Default-active unit(s) on {{ inventory_hostname }}:
+      {{ llama_default_active_units }} — other units on this host are
+      installed (enabled=false) but not started. See README.md for the
+      systemd Conflicts= exclusivity guarantee on orin-nx.

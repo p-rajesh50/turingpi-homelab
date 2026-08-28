@@ -43,6 +43,7 @@ help:
 	@echo "    make jetson-orin      Configure Orin NX (Ollama, Open WebUI, ML stack)"
 	@echo "    make jetson-nano      Configure Jetson Nano (embeddings, small models)"
 	@echo "    make llama-cpp-jetson Build llama.cpp w/ CUDA on Orin NX + Orin Nano"
+	@echo "    make llama-serve-test Smoke test llama-server /v1/chat/completions endpoints"
 	@echo ""
 	@echo "  CLUSTER 2 (CM4)"
 	@echo "    make cluster2-k3s      K3s cluster (server + agents, default Flannel CNI)"
@@ -221,6 +222,10 @@ jetson-nano:
 llama-cpp-jetson:
 	ansible-playbook ansible/playbooks/16-llama-cpp-jetson.yml \
 		-i $(INVENTORY) $(ANSIBLE_ARGS)
+
+.PHONY: llama-serve-test
+llama-serve-test:
+	@bash scripts/maintenance/llama-serve-test.sh
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ALL-IN-ONE

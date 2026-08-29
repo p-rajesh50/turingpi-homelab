@@ -1174,8 +1174,13 @@ existing `ANTHROPIC_API_KEY`: `gpt-4.1-mini` (Azure Foundry),
 existing `claude-sonnet` entry in place from `claude-sonnet-4-6` to
 `anthropic/claude-sonnet-5` (confirmed as an intentional upgrade, not a
 duplicate, after flagging the model_name collision). `claude-opus`,
-`gemini-pro`/`gemini-flash`, and the Jetson Nano Ollama entries
-(`all-minilm`/`phi3-mini`) were left untouched.
+`gemini-pro`/`gemini-flash`, and the `all-minilm`/`phi3-mini` Ollama
+entries were left untouched. **Follow-up flag (2026-08-30)**: those two
+entries route to `node_ips.jetson_nano` (`10.0.0.15`), a host now
+confirmed to have never actually existed in the live topology (see the
+Hardware table's orin-nano row) — these two LiteLLM routes are likely
+broken/unreachable today. Not fixed as part of that day's task; noted
+here for whoever picks it up next.
 
 **Diligence check paid off**: the requested Claude Haiku model ID
 (`claude-haiku-4-5-20251001`, with a date suffix) was verified against
@@ -1247,8 +1252,7 @@ accepting this as "probably fine":
 | — | — | — | 3 | ❌ FAULTY DSA switch port for K3s/RK1 cluster networking — never assign an RK1 node here. Physically occupied by the standalone Orin NX (see row above), which doesn't use this fabric. |
 | RK1 | rk1-worker-2 | 10.0.0.13 | 4 | ✅ K3s agent, Ready |
 | Orin NX | orin-nx | 10.0.0.14 | 3* | ✅ Physically installed in Slot 3 (confirmed by user — tried Slot 1, then 2, before settling here), running **standalone** — NOT joined to K3s, `jetson_llm` inventory group, running llama.cpp CUDA build + llama-server (Phase 1, see August 23-27, 2026 entry above). *Slot 3's DSA switch port is documented faulty for RK1 K3s cluster networking (see row below + CRITICAL HARDWARE NOTES) — this doesn't affect the Orin NX, which is reachable and stable standalone, not participating in that inter-node fabric.* |
-| Jetson Nano | jetson-nano | 10.0.0.15 | — | ⬜ Not yet configured |
-| Jetson Orin Nano | orin-nano | 10.0.0.50 | — | ✅ JetPack 7.2/Ubuntu 24.04 on 1TB NVMe, MAXN_SUPER (67 TOPS), user `raj` |
+| Jetson Orin Nano | orin-nano | 10.0.0.50 | — | ✅ JetPack 7.2/Ubuntu 24.04 on 1TB NVMe, MAXN_SUPER (67 TOPS), user `raj`. **Confirmed by user**: this is the same physical device originally planned as a "Jetson Nano" at 10.0.0.15 (JetPack 4.6) — it was upgraded/converted to a Super Developer Kit and reassigned 10.0.0.50 before ever being deployed at the old IP/name. 10.0.0.15 was never actually used in the live topology. |
 
 ### CRITICAL HARDWARE NOTES:
 - **Slot 3 DSA switch port is FAULTY** — nodes in slot 3 cannot communicate
@@ -1275,8 +1279,7 @@ accepting this as "probably fine":
 10.0.0.11         rk1-control (slot 1) — also Tailscale subnet router
 10.0.0.12         rk1-worker-1 (slot 2, MOVED from slot 3)
 10.0.0.13         rk1-worker-2 (slot 4)
-10.0.0.14         orin-nx — standalone, jetson_llm group, llama.cpp Phase 1 (not the in-cluster TuringPi module, which remains removed/deferred)
-10.0.0.15         jetson-nano (future)
+10.0.0.14         orin-nx — standalone, jetson_llm group, llama.cpp Phase 1. Confirmed by user: this IS the same physical Orin NX module originally intended for the TuringPi cluster (tried Slot 1, then 2, settled in Slot 3), now running standalone, not joined to K3s — see Hardware table above.
 10.0.0.20         Cluster 2 BMC (tpi2-bmc) — static, confirmed (was 10.0.0.190 DHCP)
 10.0.0.21-24      Cluster 2 CM4 nodes — all 4 (cm4-node-1 through
                   cm4-node-4) confirmed reachable and stable, including
@@ -1708,11 +1711,7 @@ http://10.0.0.40/v1   LiteLLM        http://10.0.0.35       MinIO
    - ⬜ Benchmark inference performance — not yet done (the tool-calling
      harness measured correctness, not throughput/latency).
 
-4. **Move Observability to Jetson Nano** — Prometheus + Grafana + Loki +
-   Alertmanager on the Jetson Nano (JetPack 4.6, already supported). Frees
-   RK1 resources and isolates monitoring from the app cluster.
-
-5. **CM4 Cluster** (10.0.0.21-24, all 4 nodes flashed and stable):
+4. **CM4 Cluster** (10.0.0.21-24, all 4 nodes flashed and stable):
    - ✅ **K3s bring-up implemented August 16, 2026** — forked
      `k3s-server-cm4`/`k3s-agent-cm4` roles, isolated `cm4_nodes`/`cluster2`
      inventory groups, playbooks `20-22-cluster2-*.yml`, Makefile targets
@@ -1722,13 +1721,21 @@ http://10.0.0.40/v1   LiteLLM        http://10.0.0.35       MinIO
      chrony hardening yet (only the swap-disable fix was forked in from
      `common`); revisit if/when CM4 needs the same hardening posture as
      Cluster 1.
+   - **Move Observability here**: Prometheus + Grafana + Loki + Alertmanager
+     on the CM4 cluster. Frees RK1 resources and isolates monitoring from
+     the app cluster. (Corrected 2026-08-30 — an earlier version of this
+     roadmap incorrectly named a standalone "Jetson Nano" as the
+     observability target; that device never existed separately at
+     10.0.0.15 — see the Hardware table's orin-nano row. CM4 has always
+     been the correct, actually-intended target, referenced elsewhere in
+     this document; this merges the two into one consistent statement.)
    - Deploy `ntfy` to replace Gmail alerting.
    - Pi-hole for home DNS.
    - ✅ PostgreSQL for the LiteLLM UI is done (Cluster 1, July 26, 2026 —
      see roadmap item 3 above); no longer needed here.
    - Dev/test sandbox.
 
-6. **RK1 NPU Embeddings Engine** — RKNN toolkit for the RK3588 NPU (6 TOPS
+5. **RK1 NPU Embeddings Engine** — RKNN toolkit for the RK3588 NPU (6 TOPS
    per node, 18 TOPS total across the cluster).
    - `nomic-embed-text` via RKNN for the RAG pipeline.
    - Qdrant vector database.
@@ -1736,10 +1743,16 @@ http://10.0.0.40/v1   LiteLLM        http://10.0.0.35       MinIO
 
 ### Planned Architecture
 
-- **Orin NX**: heavy AI inference (Ollama, TensorRT).
+- **Orin NX**: heavy AI inference — in practice, Phase 1 (August 23-27,
+  2026) implemented this via llama.cpp/llama-server directly, not
+  Ollama/TensorRT as originally planned here; see that entry above.
 - **RK1 cluster**: apps, gateways, UIs, embeddings via NPU.
-- **Jetson Nano**: observability stack (Prometheus, Grafana, Loki).
-- **CM4 cluster**: `ntfy`, Pi-hole, dev sandbox.
+- **CM4 cluster**: observability stack (Prometheus, Grafana, Loki),
+  `ntfy`, Pi-hole, dev sandbox.
+- **orin-nano**: Phase 1 llama.cpp model serving (gemma4-e2b default —
+  see August 23-27, 2026 entry) — not observability; an earlier version
+  of this roadmap incorrectly assigned observability to a standalone
+  "Jetson Nano" device that never existed separately from orin-nano.
 - **TrueNAS**: backup target for Longhorn + MinIO.
 
 ### Deferred (still valid, not in the current priority order)
@@ -1914,18 +1927,6 @@ Backup target for Longhorn — ✅ configured (NFSv3 forced, see July 26, 2026
 
 ---
 
-## Standalone Jetson Nano — Not Started
-
-```
-10.0.0.15
-Role: Embedding server (nomic-embed-text, all-minilm)
-Small model experimentation (phi3:mini, tinyllama)
-JetPack 4.6 — manual SDK Manager flash required
-LiteLLM already configured to route to it
-```
-
----
-
 ## Recommended Starting Prompt for New Session
 
 ```
@@ -1969,8 +1970,8 @@ July 12, 2026 entry (llama.cpp build, USB mount, TrueNAS rsync target, Open
 WebUI) and the Cluster 1 shutdown/Orin-NX-in-slot-3 test remain open too.
 
 See "Follow-Up Items for Future Sessions" for the full revised roadmap
-(TrueNAS → Slot 3/Orin NX investigation → Orin NX AI inference → move
-observability to Jetson Nano → CM4 cluster → RK1 NPU embeddings) and the
+(TrueNAS → Slot 3/Orin NX investigation → Orin NX AI inference → CM4
+cluster incl. observability migration → RK1 NPU embeddings) and the
 Deferred list for lower-priority open items (cluster-lifecycle.sh live test,
 Vault telemetry, LiteLLM OTel metrics, ArgoCD, and others).
 ```

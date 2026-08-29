@@ -42,6 +42,14 @@
             remoteRef:
               key: secret/llm-keys
               property: GEMINI_API_KEY
+          - secretKey: AZURE_FOUNDRY_API_KEY
+            remoteRef:
+              key: secret/llm-keys
+              property: AZURE_FOUNDRY_API_KEY
+          - secretKey: AZURE_FOUNDRY_API_BASE
+            remoteRef:
+              key: secret/llm-keys
+              property: AZURE_FOUNDRY_API_BASE
           - secretKey: LITELLM_MASTER_KEY
             remoteRef:
               key: secret/llm-keys
@@ -96,12 +104,17 @@
             # ── Claude via Anthropic API ───────────────────────────────────
             - model_name: claude-sonnet
               litellm_params:
-                model: claude-sonnet-4-6
+                model: anthropic/claude-sonnet-5
                 api_key: os.environ/ANTHROPIC_API_KEY
 
             - model_name: claude-opus
               litellm_params:
                 model: claude-opus-4-6
+                api_key: os.environ/ANTHROPIC_API_KEY
+
+            - model_name: claude-haiku
+              litellm_params:
+                model: anthropic/claude-haiku-4-5
                 api_key: os.environ/ANTHROPIC_API_KEY
 
             # ── Gemini via Google AI API ───────────────────────────────────
@@ -114,6 +127,54 @@
               litellm_params:
                 model: gemini/gemini-1.5-flash
                 api_key: os.environ/GEMINI_API_KEY
+
+            # ── Azure Foundry ────────────────────────────────────────────
+            - model_name: gpt-4.1-mini
+              litellm_params:
+                model: openai/gpt-4.1-mini-1
+                api_base: os.environ/AZURE_FOUNDRY_API_BASE
+                api_key: os.environ/AZURE_FOUNDRY_API_KEY
+
+            # ── Local Jetson llama.cpp servers (Phase 1, no auth) ──────────
+            # Both are reasoning-tuned Gemma-4 models — a meaningful chunk of
+            # max_tokens is spent on internal reasoning_content before any
+            # visible `content` is produced, even for trivial prompts.
+            # Live-verified 2026-08-29: gemma4-12b completed fully within 136
+            # total tokens at max_tokens=200 (finish_reason=stop), but
+            # gemma4-e2b needed ~400 (consistently burns ~190-200 tokens on
+            # reasoning alone for something as simple as "hi", and returned
+            # finish_reason=length with truncated/empty content at
+            # max_tokens=200). Callers (demos, the tool-calling harness,
+            # downstream LangGraph agents) should set max_tokens generously
+            # (300-400+) rather than using small defaults, or gemma4-e2b
+            # responses in particular may come back empty or cut off
+            # mid-thought.
+            #
+            # Context window: neither model has a -c cap in
+            # ansible/roles/llama-cpp-jetson/defaults/main.yml's extra_args.
+            # gemma4-12b auto-sizes based on available memory at load time
+            # (n_ctx_slot observed 168192-176128 across runs, not a fixed
+            # value). gemma4-e2b runs at a large fixed n_ctx_slot=131072/128K
+            # (confirmed live) — unlike gemma4-e4b on the Nano, which needed
+            # an explicit -c 4096 cap to fix a real CUDA OOM crash-loop (see
+            # SESSION-HANDOFF.md). gemma4-e2b hasn't hit that problem only
+            # because its smaller weights (3.11GB) leave headroom for the
+            # large KV cache — the ceiling itself is unbounded, so long
+            # multi-turn conversations or concurrent requests (4 slots) on
+            # either uncapped model carry the same latent OOM risk once real
+            # LangGraph-agent traffic arrives. If either OOMs, the fix is the
+            # same one already applied to gemma4-e4b: add an explicit -c cap.
+            - model_name: orin-nx-gemma4-12b
+              litellm_params:
+                model: openai/gemma4-12b
+                api_base: http://10.0.0.14:8081/v1
+                api_key: "not-needed"
+
+            - model_name: orin-nano-gemma4-e2b
+              litellm_params:
+                model: openai/gemma4-e2b
+                api_base: http://10.0.0.50:8082/v1
+                api_key: "not-needed"
 
           litellm_settings:
             drop_params: true

@@ -1154,13 +1154,86 @@ meaningful (e.g. switching which model is active) now takes ~2m50s total
 ~32s unavoidable llama-app relink), down from ~35-40 minutes before any
 of these fixes.
 
-**Not yet done**: LiteLLM wiring for either selected model (explicitly
-deferred until harness results were in), and a couple of open harness
-follow-ups noted in `SUMMARY.md` — the `ambiguous_tool` fixture likely
-has a budget-framing wording lean (all three 0.00-scoring models
-independently guessed the same tool), and `harness.py` gained a
-`--case-ids` flag for targeted re-tests that's worth knowing about for
-future fixture iteration.
+**Not yet done at the time**: LiteLLM wiring for either selected model
+(explicitly deferred until harness results were in) — **done 2026-08-29,
+see the entry below**. Still open: a couple of harness follow-ups noted
+in `SUMMARY.md` — the `ambiguous_tool` fixture likely has a
+budget-framing wording lean (all three 0.00-scoring models independently
+guessed the same tool), and `harness.py` gained a `--case-ids` flag for
+targeted re-tests that's worth knowing about for future fixture
+iteration.
+
+**August 29, 2026 — LiteLLM model_list wired to Phase 1 Jetsons + Azure Foundry + upgraded Claude models:**
+
+Added 5 models to the live LiteLLM gateway (10.0.0.40, namespace
+`litellm`) now that `secret/llm-keys` in Vault has real (non-placeholder)
+`AZURE_FOUNDRY_API_KEY`/`AZURE_FOUNDRY_API_BASE` values alongside the
+existing `ANTHROPIC_API_KEY`: `gpt-4.1-mini` (Azure Foundry),
+`claude-haiku` (new), `orin-nx-gemma4-12b` and `orin-nano-gemma4-e2b`
+(the two Phase 1 llama.cpp servers, no auth needed), and upgraded the
+existing `claude-sonnet` entry in place from `claude-sonnet-4-6` to
+`anthropic/claude-sonnet-5` (confirmed as an intentional upgrade, not a
+duplicate, after flagging the model_name collision). `claude-opus`,
+`gemini-pro`/`gemini-flash`, and the Jetson Nano Ollama entries
+(`all-minilm`/`phi3-mini`) were left untouched.
+
+**Diligence check paid off**: the requested Claude Haiku model ID
+(`claude-haiku-4-5-20251001`, with a date suffix) was verified against
+current Anthropic documentation before use and found to be **stale** —
+the correct current ID has no date suffix: `claude-haiku-4-5`. Fixed
+before applying.
+
+**Implementation**: `ansible/roles/litellm/tasks/main.yml` (the only
+file in this role — no Helm chart, everything inline) — added
+`AZURE_FOUNDRY_API_KEY`/`AZURE_FOUNDRY_API_BASE` to the `llm-api-keys`
+ExternalSecret's `data:` list (the Deployment already picks up any key
+in that K8s Secret automatically via `envFrom: secretRef`, no Deployment
+change needed) and added/edited the corresponding `model_list` entries.
+Applied via `ansible-playbook 05-ai-stack.yml` (`failed=0`) — this role
+has no tag to target just LiteLLM, so this re-runs the whole AI stack
+(qdrant/jupyterhub/langraph-server/prefect/mcp-servers are stub roles,
+no real impact). **Known gap worked around, not fixed**: this role has
+no Reloader/checksum annotation, so a ConfigMap change alone doesn't
+restart the pod — `kubectl rollout restart deployment/litellm -n
+litellm` was run manually after applying.
+
+**Verified end-to-end, not just "applied successfully"**:
+- Both new Azure Foundry keys confirmed synced from Vault into the K8s
+  Secret and the pod's actual environment (non-empty, correct values,
+  not placeholders).
+- All 5 models returned `200` with real completions through the actual
+  gateway (10.0.0.40), not direct provider calls — confirmed by checking
+  the response `model` field echoes the LiteLLM alias, not the
+  underlying provider's raw model name.
+
+**Follow-up investigation (same day) — empty/truncated local-model
+responses turned out to be a real, now-documented model characteristic,
+not a bug**: the first gateway test used a small `max_tokens` and both
+local Jetson models came back with `finish_reason: "length"` and
+empty/truncated `content` (all budget consumed by `reasoning_content`
+before any visible answer — same reasoning-model pattern seen throughout
+Phase 1 harness testing). Re-tested with realistic budgets rather than
+accepting this as "probably fine":
+- `gemma4-12b` fully resolved at `max_tokens: 200` (`stop`, real
+  content, 136 total tokens).
+- `gemma4-e2b` did **not** resolve at 200 — investigated further instead
+  of assuming a sizing fix would obviously work: retested at 400 and 800,
+  both returned `stop` with real content. Confirmed genuine, reproducible
+  behavior: `gemma4-e2b` consistently spends ~190-200 tokens on internal
+  reasoning for something as trivial as "hi", before ~8 tokens of visible
+  answer — a real per-model characteristic, not a stuck/broken state.
+- **Context-window check** (prompted by the earlier `gemma4-e4b` OOM
+  precedent): neither `gemma4-12b` nor `gemma4-e2b` has a `-c` cap in
+  `ansible/roles/llama-cpp-jetson/defaults/main.yml`. `gemma4-12b`
+  auto-sizes by available memory (`n_ctx_slot` observed 168192-176128
+  across runs, not fixed); `gemma4-e2b` runs at a large fixed
+  `n_ctx_slot=131072` (128K). Both uncapped — same latent OOM risk class
+  that hit `gemma4-e4b` (fixed there via an explicit `-c 4096`), not yet
+  triggered on these two only because their smaller weights leave more
+  headroom. Documented as an open risk to watch once real LangGraph-agent
+  multi-turn traffic arrives, with the known fix noted inline
+  (`ansible/roles/litellm/tasks/main.yml`, comment above the two Jetson
+  `model_list` entries) rather than left as a surprise for later.
 
 ---
 

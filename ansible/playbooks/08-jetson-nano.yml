@@ -1,6 +1,18 @@
 ---
 # ansible/playbooks/08-jetson-nano.yml
-# Configures the standalone Nvidia Jetson Nano Developer Kit.
+# Configures a standalone Nvidia Jetson Nano-class Developer Kit.
+#
+# CURRENTLY UNUSED — no target host configured (2026-08-30): the
+# `jetson_nano` inventory group this playbook targets was removed after
+# confirming the originally-planned device at 10.0.0.15 never existed in
+# the live topology (it was upgraded to a Super Developer Kit and
+# reassigned 10.0.0.50 as orin-nano, jetson_llm group — see
+# SESSION-HANDOFF.md). The role itself (Docker + NVIDIA container
+# runtime, Ollama install/systemd unit, model pull loop, UFW rule) is
+# generic and has no hardcoded dependency on that IP or host, so it's
+# kept as reusable scaffolding for a future similar small-Jetson device
+# rather than deleted — re-add a `jetson_nano` group in hosts.yml with a
+# real target host before running this again.
 #
 # Role: Dedicated embedding server + small model experimentation
 #   - Ollama (phi3:mini, tinyllama, all-minilm embeddings)

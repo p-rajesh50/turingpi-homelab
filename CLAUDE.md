@@ -2,7 +2,11 @@
 
 This file provides context for Claude Code to understand the project,
 current state, and how to continue the build. Read this before executing
-any commands or making any changes.
+any commands or making any changes. This is a snapshot of **current
+state** — for dated history of how things got here (incidents, decisions,
+investigations), see `SESSION-HANDOFF.md`.
+
+*Last verified against live cluster + Vault state: 2026-08-30.*
 
 ---
 
@@ -20,7 +24,7 @@ agentic app runtime, secrets management, and remote access.
 
 ## Hardware
 
-### Cluster 1 — TuringPi 2.5 (PRIMARY — K3s+Cilium live, storage live)
+### Cluster 1 — TuringPi 2.5 (PRIMARY — fully live)
 
 | Device | Hostname | IP | Slot | Status |
 |---|---|---|---|---|
@@ -28,18 +32,18 @@ agentic app runtime, secrets management, and remote access.
 | RK1 | rk1-control | 10.0.0.11 | 1 | ✅ K3s control-plane, Ready |
 | RK1 | rk1-worker-1 | 10.0.0.12 | 2 | ✅ K3s agent, Ready (moved from slot 3 after hardware fault; NFS SATA SSD re-homed via mini-PCIe adapter, device path confirmed `/dev/sda2`) |
 | RK1 | rk1-worker-2 | 10.0.0.13 | 4 | ✅ K3s agent, Ready |
-| — | (slot 3) | — | 3 | ⛔ EMPTY / FAULTY — RK1 NIC/switch-silicon fault, never assign a node here |
+| — | (slot 3) | — | 3 | ⛔ EMPTY for K3s purposes — RK1 NIC/switch-silicon fault, never assign an RK1 node here. **Physically occupied by the standalone Orin NX** (see below), which doesn't use this fabric. |
 
-> **Orin NX module removed from the board entirely** (was slot 2) — Jetson Orin setup
-> (Step 15) is deferred indefinitely until the module is reinstalled somewhere.
-
-### Standalone Nodes
+### Standalone nodes (not part of K3s)
 
 | Device | Hostname | IP | Status |
 |---|---|---|---|
-| Jetson Nano | jetson-nano | 10.0.0.15 | ⬜ Not yet configured |
+| Orin NX | orin-nx | 10.0.0.14 | ✅ Physically installed in Slot 3 (tried Slot 1, then 2, before settling here). Runs standalone, `jetson_llm` inventory group, `llama-server` (llama.cpp, CUDA). Currently active: `gemma4-12b`; `qwen3-8b` installed but not started (hedge). |
+| Jetson Orin Nano | orin-nano | 10.0.0.50 | ✅ Standalone, `jetson_llm` inventory group, `llama-server`. Currently active: `gemma4-e2b` (promoted 2026-08-27 over `qwen3.5-4b`/`gemma4-e4b` per the tool-calling harness comparison — see `tools/tool-calling-harness/results/SUMMARY.md`); both alternates installed but not started. |
 
-### Cluster 2 — TuringPi 2 + CM4 (FUTURE — do not build yet)
+**Note**: there is no "Jetson Nano" device — a device once planned for 10.0.0.15 was upgraded to a Super Developer Kit and reassigned as `orin-nano` (10.0.0.50) before ever being deployed at the old IP. 10.0.0.15 was never used in the live topology; the `jetson_nano` inventory group was removed 2026-08-30. The `jetson_orin` inventory group (for the original in-cluster Ollama/Open-WebUI plan, `07-jetson-orin.yml`) is kept empty/reserved — that plan was superseded by the standalone `jetson_llm`/llama.cpp approach above.
+
+### Cluster 2 — TuringPi 2 + CM4
 
 | Device | Hostname | IP |
 |---|---|---|
@@ -49,11 +53,13 @@ agentic app runtime, secrets management, and remote access.
 | CM4 Node 3 | cm4-node-3 | 10.0.0.23 |
 | CM4 Node 4 | cm4-node-4 | 10.0.0.24 |
 
+**Status**: all 4 nodes flashed, reachable, and stable (survived a full power-cycle test). K3s bring-up is **code-complete** (forked `k3s-server-cm4`/`k3s-agent-cm4` roles, isolated `cm4_nodes`/`cluster2` inventory groups, playbooks `20-22-cluster2-*.yml`) but **not yet run against the live nodes** — no live K3s cluster exists here yet. Known gap once run: no UFW/fail2ban/chrony hardening forked in yet (only swap-disable).
+
 ### TrueNAS
 
 | Device | Hostname | IP | Status |
 |---|---|---|---|
-| TrueNAS Core (FreeBSD) | truenas | 10.0.0.5 (static, confirmed) | ✅ Accessible at https://truenas.kloud-worx.com via Cloudflare Tunnel — HTTPS on port 443 with a `cloudflare-origin` certificate (valid until 2041) |
+| TrueNAS Core (FreeBSD) | truenas | 10.0.0.5 (static, confirmed) | ✅ Admin UI accessible at https://truenas.kloud-worx.com via Cloudflare Tunnel. Longhorn backup target configured (NFSv3 forced). SMB/NFS media exports not yet configured. |
 
 ---
 
@@ -66,47 +72,63 @@ agentic app runtime, secrets management, and remote access.
 10.0.0.11         rk1-control  (slot 1)
 10.0.0.12         rk1-worker-1 (slot 2, moved from slot 3) — also NFS server (mini-PCIe SATA adapter, path confirmed /dev/sda2)
 10.0.0.13         rk1-worker-2 (slot 4)
-                  slot 3 — EMPTY / FAULTY, never assign a node here
-10.0.0.15         jetson-nano  (standalone)
-10.0.0.20-24      Cluster 2 (future)
+                  slot 3 — EMPTY for K3s, physically occupied by standalone orin-nx (see Hardware)
+10.0.0.14         orin-nx      (standalone, jetson_llm group, llama.cpp)
+10.0.0.20-24      Cluster 2 (code-complete, not yet live — see Hardware)
 10.0.0.30-49      MetalLB LoadBalancer pool (Cluster 1)
-10.0.0.50-69      MetalLB LoadBalancer pool (Cluster 2, future)
+10.0.0.50         orin-nano    (standalone, jetson_llm group, llama.cpp)
+10.0.0.50-69      MetalLB LoadBalancer pool (Cluster 2, future) — ⚠️ CONFLICT: orin-nano's IP sits at the start of this range; re-check before Cluster 2's MetalLB pool is actually provisioned.
 10.0.0.100-199    DHCP pool (router managed)
 ```
 
 ---
 
-## Build Order (overall project)
+## Current State Summary
 
-> **Rebuild complete.** A hardware fault at slot 3 forced a physical rework
-> (rk1-worker-1 moved to slot 2, Orin NX removed, slot 3 retired), taken as an
-> opportunity to also replace kubeadm+Flannel with K3s+Cilium. The new cluster is
-> live, storage is deployed and verified — see `SESSION-HANDOFF.md` for the full
-> session log. A full data wipe (Vault/Gitea/Longhorn/MinIO) was accepted, so steps
-> 9-14 below still need to be run fresh against the new cluster.
+**Cluster 1 is fully live and has been for some time** — confirmed via
+live `kubectl get pods -A` (2026-08-30): K3s+Cilium (3 nodes `Ready`),
+Longhorn+NFS+MinIO storage, MetalLB+ingress-nginx, Prometheus+Grafana+
+Alertmanager (namespace `monitoring`), Headlamp, Portainer, Vault+External
+Secrets Operator, Gitea+Actions runners+package-cleanup CronJob, LiteLLM+
+PostgreSQL, Cloudflare Tunnel — all running, pod ages ranging 6-53 days.
+Two client apps are also live via Gitea CI/CD: `research-forum-app` and
+`rf-pre-event-app` (their own namespaces).
 
-1. ✅ Cluster 1 — Workstation setup
-2. ✅ Cluster 1 — BMC static IP + credentials
-3. ✅ Cluster 1 — Flash Ubuntu 22.04 on RK1 nodes (originally slots 1, 3, 4 — module now in slot 2)
-4. ✅ Cluster 1 — Bootstrap (SSH keys, hostnames, static IPs)
-5. ✅ Cluster 1 — Common hardening (UFW, fail2ban, NTP, packages)
-6. ✅ Cluster 1 — K3s cluster (server + agents + Cilium CNI)
-7. ✅ Cluster 1 — Storage (Longhorn + NFS + MinIO) — device path confirmed `/dev/sda2`
-7b. ✅ Cluster 1 — Longhorn NVMe migration
-8. ⬜ Cluster 1 — Cluster add-ons (MetalLB, ingress, Prometheus/Grafana)   ← NEXT STEP
-9. ⬜ Cluster 1 — Vault + External Secrets Operator — re-run, data wiped
-10. ⬜ Cluster 1 — Secrets setup (API keys into Vault) — re-enter via `make secrets`
-11. ⬜ Cluster 1 — AI stack (LiteLLM; Qdrant/JupyterHub/LangGraph/Prefect still stub roles)
-12. ⬜ Cluster 1 — Developer tools (Gitea + CI/CD) — re-run, repos wiped
-13. ⬜ Cluster 1 — Tailscale (remote access) — re-run against new cluster
-14. ⬜ Cluster 1 — Cloudflare Tunnel (web UIs at kloud-worx.com) — re-run against new cluster
-15. ⬜ Jetson Orin NX — deferred indefinitely (module removed from board)
-16. ⬜ Jetson Nano — JetPack 4.6 flash (manual) + Ansible setup
-17. ⬜ TrueNAS — SMB + NFS + Jellyfin (FreeBSD Core). Static IP (10.0.0.5) is
-    confirmed and the admin UI is reachable at https://truenas.kloud-worx.com
-    via Cloudflare Tunnel — SMB/NFS export configuration and Longhorn backup
-    target setup are still not done.
-18. ⬜ Cluster 2 — CM4 cluster + Pi-hole + dev sandbox
+**Phase 0/1 (standalone llama.cpp on orin-nx/orin-nano)** is also live —
+see the Hardware table above and `ansible/roles/llama-cpp-jetson/README.md`
+for the full model/port/systemd-unit reference, and
+`tools/tool-calling-harness/` for the comparison harness that picked the
+current default models.
+
+**LiteLLM model_list** (`ansible/roles/litellm/tasks/main.yml`, live as of
+2026-08-30): `claude-sonnet` (`anthropic/claude-sonnet-5`), `claude-haiku`
+(`anthropic/claude-haiku-4-5`), `gpt-4.1-mini` (Azure Foundry),
+`orin-nx-gemma4-12b`, `orin-nano-gemma4-e2b`. There are no Ollama-backed
+routes anymore — the previous `all-minilm`/`phi3-mini` entries (pointed at
+the nonexistent Jetson Nano) were removed 2026-08-30. **`claude-opus`,
+`gemini-pro`, and `gemini-flash` were also removed 2026-08-30**:
+`claude-opus` to prevent accidental high-cost usage against a small fixed
+Anthropic credit ($20) with no per-model spend guard yet; `gemini-pro`/
+`gemini-flash` because `GEMINI_API_KEY` is still a placeholder (superseded
+by the Azure Foundry work this session) and both would fail if selected
+regardless. `ANTHROPIC_API_KEY` and `AZURE_FOUNDRY_API_KEY`/
+`AZURE_FOUNDRY_API_BASE` are real (confirmed live in Vault);
+`GEMINI_API_KEY` remains an unused placeholder — re-add Gemini routes once
+it's replaced via `make secrets`.
+
+**Open WebUI is NOT deployed anywhere** — confirmed live, no such
+workload exists in any namespace. `llm.kloud-worx.com` has no backing
+service; do not present it as live in any doc.
+
+**Not yet done**: Cluster 2 live bring-up (code exists, not run), TrueNAS
+SMB/NFS media exports, Whisper speech-to-text, LiteLLM teams/budgets for
+the client FinOps demo, benchmarking Phase 1 inference throughput/latency
+(the harness measured correctness, not speed).
+
+Full session-by-session detail (incidents, root causes, investigations,
+verification steps) lives in `SESSION-HANDOFF.md` — treat that file as
+the authoritative running log and this section as a current-state
+summary only.
 
 ---
 
@@ -115,6 +137,8 @@ agentic app runtime, secrets management, and remote access.
 ```
 turingpi-homelab/
 ├── CLAUDE.md                              ← YOU ARE HERE
+├── README.md                              ← public-facing repo overview / quick start
+├── SESSION-HANDOFF.md                     ← dated chronological session log
 ├── Makefile                               ← all operations as make targets
 ├── ansible.cfg                            ← Ansible config
 ├── ansible/
@@ -131,50 +155,55 @@ turingpi-homelab/
 │   │   ├── 03-storage.yml                 ← make storage
 │   │   ├── 03b-longhorn-nvme.yml          ← make longhorn-nvme
 │   │   ├── 04-cluster-addons.yml          ← make addons
-│   │   ├── 05-ai-stack.yml                ← make ai-stack
+│   │   ├── 05-ai-stack.yml                ← make ai-stack (LiteLLM; others stub roles)
 │   │   ├── 06-dev-tools.yml               ← make dev-tools
-│   │   ├── 07-jetson-orin.yml             ← make jetson-orin
-│   │   ├── 08-jetson-nano.yml             ← make jetson-nano
+│   │   ├── 07-jetson-orin.yml             ← make jetson-orin (unused — see Hardware note)
+│   │   ├── 08-jetson-nano.yml             ← make jetson-nano (unused — no target host, reusable scaffolding, see role comment)
 │   │   ├── 09-vault.yml                   ← make vault
 │   │   ├── 10-tailscale.yml               ← make tailscale
-│   │   └── 11-cloudflare-tunnel.yml       ← make cloudflare
+│   │   ├── 11-cloudflare-tunnel.yml       ← make cloudflare
+│   │   ├── 16-llama-cpp-jetson.yml        ← make llama-cpp-jetson (Phase 0/1, orin-nx + orin-nano)
+│   │   ├── 20-cluster2-kubernetes.yml     ← make cluster2-k3s (code-complete, not yet run live)
+│   │   ├── 21-cluster2-longhorn.yml       ← make cluster2-longhorn (code-complete, not yet run live)
+│   │   └── 22-cluster2-metallb.yml        ← make cluster2-metallb (code-complete, not yet run live)
 │   └── roles/
 │       ├── common/                        ← hardening, packages, NTP, UFW
-│       ├── k3s-server/                    ← K3s server install, node-token, kubeconfig
-│       ├── k3s-agent/                     ← K3s agent install/join
-│       ├── longhorn/                      ← replicated block storage (NVMe)
-│       ├── nfs-server/                    ← shared filesystem (SATA SSD)
-│       ├── minio/                         ← S3-compatible object storage
-│       ├── litellm/                       ← AI gateway (routes to Ollama + cloud)
-│       ├── qdrant/                        ← vector database
-│       ├── jupyterhub/                    ← notebook environment
-│       ├── langraph-server/               ← production agent runtime
-│       ├── prefect/                       ← agent orchestration
-│       ├── mcp-servers/                   ← MCP tool servers (postgres, qdrant, minio)
-│       ├── gitea/                         ← self-hosted Git + CI/CD
-│       ├── vault/                         ← HashiCorp Vault secrets management
-│       ├── external-secrets/              ← syncs Vault → K8s Secrets
-│       ├── tailscale/                     ← remote access mesh VPN
-│       ├── cloudflare-tunnel/             ← expose web UIs at kloud-worx.com
-│       ├── jetson-orin/                   ← Orin NX LLM setup
-│       └── jetson-nano/                   ← Nano embedding server setup
+│       ├── k3s-server/ k3s-agent/         ← K3s install/join
+│       ├── longhorn/ nfs-server/ minio/   ← storage
+│       ├── litellm/                       ← AI gateway (see model_list above)
+│       ├── qdrant/ jupyterhub/ langraph-server/ prefect/ mcp-servers/  ← stub roles, not deployed
+│       ├── gitea/                         ← self-hosted Git + CI/CD + package-registry retention CronJob
+│       ├── vault/ external-secrets/       ← secrets
+│       ├── tailscale/ cloudflare-tunnel/  ← remote access
+│       ├── jetson-orin/                   ← unused (see Hardware note)
+│       ├── jetson-nano/                   ← unused, reusable scaffolding (see role comment)
+│       └── llama-cpp-jetson/              ← Phase 0/1: llama.cpp build + server mode on orin-nx/orin-nano — has its own README.md
 ├── scripts/
 │   ├── workstation/setup.sh               ← new machine setup
 │   ├── bmc/bmc-power.sh                   ← node power control
-│   ├── os-flash/flash-rk1.sh             ← automated OS flash
-│   ├── os-flash/discover-nodes.sh        ← find node IPs after flash
-│   ├── secrets/setup-api-keys.sh         ← store API keys in Vault
+│   ├── os-flash/flash-rk1.sh              ← automated OS flash
+│   ├── os-flash/discover-nodes.sh         ← find node IPs after flash
+│   ├── secrets/setup-api-keys.sh          ← store API keys in Vault
 │   └── maintenance/
-│       ├── health-check.sh               ← cluster health check
-│       └── teardown.sh                   ← reset kubernetes
+│       ├── health-check.sh                ← cluster health check
+│       ├── cluster-lifecycle.sh           ← shutdown / startup / health-check, --dry-run
+│       ├── teardown.sh                    ← reset kubernetes
+│       └── llama-serve-test.sh            ← smoke test for llama-server endpoints
+├── tools/
+│   └── tool-calling-harness/              ← standalone Python harness scoring tool-calling
+│                                            reliability (not an Ansible role) — has its own
+│                                            README.md and results/SUMMARY.md
 ├── kubernetes/
 │   ├── manifests/                         ← raw K8s YAML
 │   └── helm-values/
 │       └── prometheus-stack.yml           ← ARM64-tuned Prometheus values
 ├── cluster2/                              ← CM4 cluster (future — do not touch)
 └── docs/
-    ├── day0-runbook.md                    ← complete setup guide
-    └── git-setup.md                       ← GitHub setup instructions
+    ├── day0-runbook.md                    ← day-0 hardware/software bring-up checklist
+    ├── git-setup.md                       ← GitHub repo init instructions
+    ├── jetson-orin-flash.md               ← JetPack flash guide (predates the standalone llama.cpp approach — verify relevance before following)
+    ├── medium-series-outline.md           ← content-planning doc, unrelated to cluster ops
+    └── runbook.md                         ← main severity-ordered troubleshooting playbook
 ```
 
 ---
@@ -205,16 +234,20 @@ longhorn_version: "1.6.2"
 nfs_server_ip: "10.0.0.12"
 nfs_export_path: "/mnt/sata/k8s"
 nfs_sata_device: "/dev/sda2"
-ollama_port: 11434
 litellm_service_ip: "10.0.0.40"
+llama_cpp_version: "<pinned commit SHA — see ansible/roles/llama-cpp-jetson/defaults/main.yml>"
+llama_active_model_nx: gemma4-12b
+llama_active_model_nano: gemma4-e2b
 ```
 
 ### SSH Access
 ```bash
-# Key-based auth works on all 3 RK1 nodes
+# Key-based auth works on all 3 RK1 nodes and both standalone Jetsons
 ssh ubuntu@10.0.0.11   # rk1-control
 ssh ubuntu@10.0.0.12   # rk1-worker-1
 ssh ubuntu@10.0.0.13   # rk1-worker-2
+ssh raj@10.0.0.14      # orin-nx
+ssh raj@10.0.0.50      # orin-nano
 
 # SSH key location
 ~/.ssh/turingpi_homelab
@@ -248,14 +281,18 @@ Your apps / agents / notebooks
         ▼ OpenAI-compatible API
 LiteLLM Gateway (http://10.0.0.40/v1)
         │
-        ├── model="gemma3"     → Orin NX Ollama — DEFERRED, module removed from board
-        ├── model="mistral"    → Orin NX Ollama — DEFERRED, module removed from board
-        ├── model="openchat"   → Orin NX Ollama — DEFERRED, module removed from board
-        ├── model="claude-*"   → Anthropic API (key in Vault)
-        ├── model="gemini-*"   → Google AI API (key in Vault)
-        ├── model="phi3-mini"  → Jetson Nano Ollama (10.0.0.15:11434)
-        └── model="all-minilm" → Jetson Nano Ollama (embeddings)
+        ├── model="claude-sonnet"          → Anthropic API (anthropic/claude-sonnet-5)
+        ├── model="claude-haiku"           → Anthropic API (anthropic/claude-haiku-4-5)
+        ├── model="gpt-4.1-mini"           → Azure Foundry
+        ├── model="orin-nx-gemma4-12b"     → orin-nx llama-server, no auth (10.0.0.14:8081)
+        └── model="orin-nano-gemma4-e2b"   → orin-nano llama-server, no auth (10.0.0.50:8082)
 ```
+See `ansible/roles/llama-cpp-jetson/README.md` for the full model/port
+table on both Jetsons (including the non-default alternates and the
+systemd `Conflicts=` mutual-exclusion mechanism), and
+`ansible/roles/litellm/tasks/main.yml`'s `model_list` comments for
+per-model operational caveats (reasoning-token overhead, uncapped
+context-window risk on the two local models).
 
 ---
 
@@ -266,13 +303,24 @@ LiteLLM Gateway (http://10.0.0.40/v1)
 - **Init file:** `~/.vault-init.json` — contains unseal keys and root token
 - **Credentials file:** `~/.turingpi` — BMC credentials only (not in repo)
 
-### Vault secret paths
+### Vault secret paths (confirmed live 2026-08-30)
 ```
-secret/llm-keys      ANTHROPIC_API_KEY, GEMINI_API_KEY, LITELLM_MASTER_KEY
-secret/minio         rootUser, rootPassword
-secret/postgres      POSTGRES_USER, POSTGRES_PASSWORD
-secret/tailscale     AUTH_KEY
-secret/cloudflare    TUNNEL_TOKEN, API_TOKEN, ZONE_ID, ACCOUNT_ID
+secret/llm-keys               ANTHROPIC_API_KEY (real), AZURE_FOUNDRY_API_KEY (real),
+                               AZURE_FOUNDRY_API_BASE (real), GEMINI_API_KEY (still
+                               placeholder, AND unused — gemini-pro/gemini-flash were
+                               removed from model_list 2026-08-30; ExternalSecret wiring
+                               kept for a future real key), LITELLM_MASTER_KEY
+secret/minio                  rootUser, rootPassword
+secret/postgres                POSTGRES_PASSWORD
+secret/tailscale               AUTH_KEY
+secret/cloudflare              TUNNEL_TOKEN, API_TOKEN, ZONE_ID, ACCOUNT_ID
+secret/gitea                   GITEA_ADMIN_USER, GITEA_ADMIN_PASSWORD, GITEA_ADMIN_EMAIL
+secret/gitea-package-cleanup   TOKEN, TOKEN_NAME (read:package,write:package scope only)
+secret/alertmanager            GMAIL_USER, GMAIL_APP_PASSWORD
+secret/grafana                 (admin credentials)
+secret/headlamp                (admin credentials)
+secret/portainer               (admin credentials)
+secret/truenas                 (credentials)
 ```
 
 ---
@@ -291,22 +339,26 @@ secret/cloudflare    TUNNEL_TOKEN, API_TOKEN, ZONE_ID, ACCOUNT_ID
 - **Domain:** kloud-worx.com (on Cloudflare, nameservers pointing from GoDaddy)
 - **Alertmanager notifications:** Gmail SMTP (`smtp.gmail.com:587`, credentials in
   Vault at `secret/alertmanager`) is a **temporary** notification channel — plan is
-  to replace it with self-hosted `ntfy` once Cluster 2 (CM4) is built (see Future
+  to replace it with self-hosted `ntfy` once Cluster 2 (CM4) is live (see Future
   Enhancements Backlog).
 
-### Service URLs (after full deployment)
+### Service URLs (confirmed live 2026-08-30 via kubectl)
 ```
-https://vault.kloud-worx.com      HashiCorp Vault UI
-https://grafana.kloud-worx.com    Grafana monitoring
-https://jupyter.kloud-worx.com    JupyterHub notebooks
-https://gitea.kloud-worx.com      Self-hosted Git
-https://llm.kloud-worx.com        Open WebUI (chat with local models)
-https://litellm.kloud-worx.com    LiteLLM API gateway
-https://minio.kloud-worx.com      MinIO S3 console
-https://prefect.kloud-worx.com    Prefect orchestration UI
-https://headlamp.kloud-worx.com   Headlamp K8s UI
-https://portainer.kloud-worx.com  Portainer multi-cluster UI
-https://truenas.kloud-worx.com    TrueNAS admin
+https://vault.kloud-worx.com      HashiCorp Vault UI — LIVE
+https://grafana.kloud-worx.com    Grafana monitoring — LIVE
+https://gitea.kloud-worx.com      Self-hosted Git — LIVE
+https://litellm.kloud-worx.com    LiteLLM API gateway — LIVE
+https://minio.kloud-worx.com      MinIO S3 console — LIVE
+https://headlamp.kloud-worx.com   Headlamp K8s UI — LIVE
+https://portainer.kloud-worx.com  Portainer multi-cluster UI — LIVE
+https://truenas.kloud-worx.com    TrueNAS admin — LIVE
+https://research-forum.kloud-worx.com  Client app (Gitea CI-deployed) — LIVE
+https://rf-pre-event.kloud-worx.com    Client app (Gitea CI-deployed) — LIVE
+https://prefect.kloud-worx.com    Reserved — no workload deployed (Prefect is a stub role)
+https://jupyter.kloud-worx.com    Reserved — no workload deployed (JupyterHub is a stub role)
+https://llm.kloud-worx.com        NOT LIVE — no Open WebUI deployment exists anywhere in the
+                                   cluster (confirmed via kubectl). Do not present this as
+                                   live/wired in any doc or demo.
 ```
 
 ---
@@ -316,10 +368,11 @@ https://truenas.kloud-worx.com    TrueNAS admin
 ```bash
 # Verification
 make check            # verify tools + BMC connectivity
-make health           # cluster health check (nodes, pods, Ollama, services)
+make health           # cluster health check (nodes, pods, services) — lighter/older
+make cluster-health    # fuller check: + PVCs, Longhorn volume health, MetalLB, swap, eMMC
 make power-status     # show all node power states
 
-# Build sequence (run in this order)
+# Build sequence (run in this order — all done on Cluster 1 already)
 make bootstrap        # SSH keys, hostnames, static IPs (needs --ask-pass first time)
 make common           # hardening, packages, NTP, UFW
 make kubernetes       # K3s cluster (server + agents) + Cilium CNI — or run individually:
@@ -330,14 +383,23 @@ make storage          # Longhorn + NFS + MinIO
 make addons           # MetalLB, ingress-nginx, Prometheus, Grafana, Dashboard
 make vault            # HashiCorp Vault + External Secrets Operator
 make secrets          # store API keys interactively into Vault
-make ai-stack         # LiteLLM, Qdrant, JupyterHub, LangGraph, Prefect, MCP servers
+make ai-stack         # LiteLLM (others are stub roles, not deployed)
 make dev-tools        # Gitea + Actions runner
+
+# Remote access
 make tailscale        # Tailscale on rk1-control only (see Remote Access section)
 make cloudflare       # Cloudflare Tunnel for kloud-worx.com
 
-# GPU nodes (manual JetPack flash required first — see docs/)
-make jetson-orin      # Orin NX: Ollama, Open WebUI, ML stack
-make jetson-nano      # Jetson Nano: embeddings, small models
+# Standalone Jetsons (JetPack pre-flash required; SSH key already provisioned)
+make llama-cpp-jetson  # Phase 0/1: build llama.cpp w/ CUDA + deploy llama-server on orin-nx + orin-nano
+make llama-serve-test  # smoke test the active llama-server endpoints
+make jetson-orin       # UNUSED — original Ollama/Open-WebUI in-cluster plan, no target host
+make jetson-nano       # UNUSED — no target host configured, kept as reusable scaffolding
+
+# Cluster 2 (code-complete, not yet run live)
+make cluster2-k3s      # K3s cluster (server + agents, default Flannel CNI)
+make cluster2-longhorn # Longhorn storage, scoped to cm4-node-3 only
+make cluster2-metallb  # MetalLB with its own IP pool (10.0.0.60-69)
 
 # Shortcuts
 make build            # common + kubernetes + storage + addons
@@ -352,6 +414,8 @@ make cycle-node N=1        # power cycle specific BMC slot
 make teardown         # reset Kubernetes (keeps OS)
 make teardown-hard    # reset Kubernetes + power off nodes
 make update           # apt upgrade all nodes
+make cluster-shutdown # graceful node power-down (cordons/drains, verifies Longhorn detach)
+make cluster-startup  # power-up + re-verify health
 
 # Git
 make save MSG="..."   # commit and push
@@ -471,29 +535,19 @@ admin-scoped token persists anywhere for this job. Full incident writeup:
 a CronJob via `kubectl create job --from=cronjob` — override risky env vars
 explicitly, its template's live-action defaults get copied verbatim).
 
----
-
-## Current State Summary
-
-The K3s+Cilium rebuild (triggered by a slot-3 hardware fault — rk1-worker-1 moved to
-slot 2, Orin NX removed from the board, slot 3 retired) is complete and verified:
-all 3 nodes `Ready`, Cilium healthy, cross-node pod connectivity confirmed. Storage
-(Longhorn NVMe-backed on rk1-worker-1/rk1-worker-2, NFS on rk1-worker-1 at confirmed
-`/dev/sda2`, MinIO) is deployed and verified healthy. A full data wipe of the
-previous cluster's Vault secrets, Gitea repos, Longhorn volumes, and MinIO data was
-accepted as part of the migration — no backup was taken.
-
-Full session-by-session detail (bugs found and fixed, verification steps run) lives
-in `SESSION-HANDOFF.md` — treat that file as the authoritative running log and this
-section as a short current-state summary only.
-
-**Next step:** `make addons` (MetalLB, ingress-nginx, Prometheus/Grafana, Dashboard),
-then continue in order: `make vault` → `make secrets` → `make ai-stack` →
-`make dev-tools` → `make tailscale` → `make cloudflare`.
+### llama-cpp-jetson role re-run re-downloads models / re-triggers a full rebuild
+Two separate idempotency gaps, both fixed: model downloads now use
+`get_url`'s `checksum:` param (was unconditionally re-fetching multi-GB
+files every run); `llama_cpp_version` is pinned to a known-good commit
+instead of floating `master` (was triggering full CUDA rebuilds from
+unrelated upstream commits landing mid-session). See
+`ansible/roles/llama-cpp-jetson/defaults/main.yml` comments and
+`SESSION-HANDOFF.md`'s August 23-27, 2026 entry for the full investigation
+and verification.
 
 ---
 
-## Agentic App Development Stack (once cluster is running)
+## Agentic App Development Stack
 
 ```python
 # All LLM calls go through LiteLLM — swap models by changing one string
@@ -511,7 +565,7 @@ from google.adk.models.lite_llm import LiteLlm
 agent = Agent(
     name="homelab-agent",
     model=LiteLlm(
-        model="claude-sonnet",          # or "gemma3" for local/free
+        model="claude-sonnet",              # or "orin-nano-gemma4-e2b" for local/free
         api_base="http://10.0.0.40/v1"
     ),
     tools=[postgres_tool, qdrant_tool, web_search_tool]
@@ -522,9 +576,8 @@ agent = Agent(
 
 ## Important Reminders for Claude Code
 
-1. **Never modify cluster2/ directory** — CM4 cluster is future work
-2. **Never assign a node to slot 3** — hardware fault (RK1 NIC/switch silicon); Orin NX
-   module has been removed from the board entirely, no slot currently assigned to it
+1. **Never modify cluster2/ directory** — CM4 cluster live bring-up is future work (code exists, not yet run)
+2. **Never assign an RK1 node to slot 3** — hardware fault (RK1 NIC/switch silicon). The Orin NX physically occupies this slot but runs standalone, unaffected by the fault.
 3. **group_vars path** is `ansible/inventory/group_vars/all/vars.yml`
 4. **Secrets** go into Vault via `make secrets`, never hardcoded in files
 5. **Kubeconfig** path is `~/.kube/turingpi-cluster1.conf`
@@ -535,17 +588,19 @@ agent = Agent(
    gets written to disk. `node_static_ip` is set per-host in `hosts.yml`.
 8. **Storage devices:** NVMe=`/dev/nvme0n1` (Longhorn, slot 2+4), SATA (NFS, rk1-worker-1
    in slot 2 via mini-PCIe adapter — device path confirmed `/dev/sda2`)
+9. **Do not present `llm.kloud-worx.com`/Open WebUI as live** in any doc, demo, or
+   summary — confirmed no such deployment exists.
+10. **`GEMINI_API_KEY` is still a placeholder** — Gemini routes in LiteLLM will not
+    authenticate until `make secrets` is re-run with a real key.
 
 ---
 
 ## Future Enhancements Backlog
 
-Not scheduled — ideas to revisit once the core stack (Steps 6-14) is deployed and stable.
-Ranked by priority.
+Not scheduled — ideas to revisit once bandwidth allows. Ranked by priority.
 
 1. **ArgoCD** — GitOps operator for self-healing Helm deployments and automated upgrades;
    would replace/complement the current Ansible push model.
-   *Prerequisite:* core stack stable (post Step 14).
 
 2. **RK1 NPU Device Plugin** — exposes the RK3588's built-in NPU to Kubernetes pods for
    on-device inference without a GPU. Reference implementation for the same hardware:
@@ -553,31 +608,34 @@ Ranked by priority.
    *Prerequisite:* K3s+Cilium cluster stable (done).
 
 3. **Loki** — log aggregation to complement the existing Prometheus+Grafana stack, completing
-   the observability triad (metrics, logs, traces).
-   *Prerequisite:* `make addons` (Prometheus/Grafana) deployed.
+   the observability triad (metrics, logs, traces). Planned migration target is the CM4
+   cluster (Cluster 2), alongside Grafana/Alertmanager, once it's live — frees RK1 resources.
 
 4. **Flyte** — ML pipeline orchestration for distributed training and experiment tracking.
-   *Prerequisite:* Jetson Nano and/or RK1 NPU workloads active.
+   *Prerequisite:* RK1 NPU workloads active.
 
 5. **Chroma** — vector database for RAG applications.
-   *Prerequisite:* LiteLLM gateway serving local models (Step 11).
+   *Prerequisite:* LiteLLM gateway serving local models (done — see AI/ML Stack Architecture).
 
-6. **Nvidia Device Plugin + Jetson Exporter** — GPU scheduling and metrics for the standalone
-   Jetson Nano once it joins the cluster.
-   *Prerequisite:* Jetson Nano JetPack flash + Ansible setup (Step 16).
+6. **Nvidia Device Plugin + Jetson Exporter** — GPU scheduling and metrics for orin-nx/orin-nano.
 
-7. **Local Coding Assistant** — Ollama (Gemma 3 12B) + Open WebUI + Continue.dev VS Code
-   extension. Self-hosted GitHub Copilot alternative with no token limits. New Ansible
-   roles needed: `ollama`, `open-webui`.
-   *Prerequisite:* Jetson Nano configured for faster inference.
+7. **Local Coding Assistant** — Open WebUI + Continue.dev VS Code extension wired to the
+   existing Phase 1 llama-server endpoints. Self-hosted GitHub Copilot alternative with no
+   token limits. Partially superseded by Phase 1's direct llama-server approach — evaluate
+   whether Open WebUI adds enough value to deploy, or whether direct LiteLLM routing (already
+   live) is sufficient.
 
-8. **PostgreSQL for LiteLLM** — deploy PostgreSQL (Bitnami Helm chart, Longhorn PVC) and
-   connect LiteLLM to it to enable the LiteLLM UI (spend tracking, user management, team
-   management). LiteLLM UI currently returns a "not connected to DB" error.
-   *Prerequisite:* Longhorn storage working (done).
+8. **Whisper large-v3 speech-to-text** on the Phase 1 Jetson hardware — not yet started.
 
 9. **Self-hosted `ntfy` for Alertmanager notifications** — replaces the current Gmail
    SMTP receiver (`kubernetes/helm-values/prometheus-stack.yml`), which is a temporary
    bridge. Push notifications instead of email, no dependency on a third-party mail
    provider.
-   *Prerequisite:* Cluster 2 (CM4) built.
+   *Prerequisite:* Cluster 2 (CM4) live.
+
+10. **Benchmark Phase 1 inference performance** — the tool-calling harness measured
+    correctness, not throughput/latency.
+
+11. **LiteLLM teams/budgets for the client FinOps demo** ($40/mo standard, $200/mo developer)
+    — PostgreSQL backend is live and ready (spend tracking, user/team management unblocked);
+    the teams/budgets themselves haven't been built yet.

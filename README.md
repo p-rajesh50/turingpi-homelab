@@ -113,7 +113,7 @@ flowchart TB
 10.0.0.12         rk1-worker-1  (slot 2) — also NFS server
 10.0.0.13         rk1-worker-2  (slot 4)
                   slot 3 — EMPTY / FAULTY, never assign a node here
-10.0.0.15         jetson-nano   (standalone, not yet configured)
+10.0.0.50         orin-nano     (standalone, Jetson Orin Nano)
 10.0.0.30-49      MetalLB LoadBalancer pool (Cluster 1)
 10.0.0.100-199    DHCP pool (router managed)
 ```

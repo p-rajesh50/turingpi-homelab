@@ -27,8 +27,12 @@ node_ips:
   rk1_control:   "10.0.0.11"         # slot 1
   rk1_worker_1:  "10.0.0.12"         # slot 2 (moved from slot 3 after hardware fault)
   rk1_worker_2:  "10.0.0.13"         # slot 4
-  jetson_nano:   "10.0.0.15"         # standalone
-  # orin_nx removed — module pulled from the board, deferred indefinitely
+  # jetson_nano (10.0.0.15) removed 2026-08-30 — confirmed to have never
+  # existed in the live topology; that device was upgraded to a Super
+  # Developer Kit and reassigned 10.0.0.50 (orin-nano, jetson_llm group in
+  # hosts.yml) before ever being deployed at this IP. See SESSION-HANDOFF.md.
+  # orin-nx (10.0.0.14, jetson_llm group) is standalone in Slot 3, running
+  # llama.cpp — not removed from the board as this comment previously said.
 
 # Kubernetes networking (must not overlap with 10.0.0.0/24)
 pod_cidr: "10.244.0.0/16"

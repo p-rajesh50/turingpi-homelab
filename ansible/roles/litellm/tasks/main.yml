@@ -38,6 +38,12 @@
             remoteRef:
               key: secret/llm-keys
               property: ANTHROPIC_API_KEY
+          # Currently unused by any model_list entry (gemini-pro/gemini-flash
+          # removed 2026-08-30 — GEMINI_API_KEY was still a placeholder in
+          # Vault, so both entries would fail if selected regardless).
+          # Left wired here rather than removed — re-add a Gemini model_list
+          # entry once a real key is set via `make secrets`, same treatment
+          # given to the Jetson Nano cleanup's now-unused resources earlier.
           - secretKey: GEMINI_API_KEY
             remoteRef:
               key: secret/llm-keys
@@ -89,17 +95,9 @@
             # ── Local models via Orin NX — DEFERRED, module removed from the
             # board (see CLAUDE.md Hardware section). Re-add gemma3/mistral/
             # openchat/nomic-embed-text routes here once Orin NX is reinstalled.
-
-            # ── Embedding via Jetson Nano (offloads from Orin NX) ─────────
-            - model_name: all-minilm
-              litellm_params:
-                model: ollama/all-minilm
-                api_base: http://{{ node_ips.jetson_nano }}:{{ ollama_port }}
-
-            - model_name: phi3-mini
-              litellm_params:
-                model: ollama/phi3:mini
-                api_base: http://{{ node_ips.jetson_nano }}:{{ ollama_port }}
+            # (Superseded 2026-08-30: the actual Orin NX Phase 1 routes are
+            # orin-nx-gemma4-12b / orin-nano-gemma4-e2b below, not this
+            # deferred Ollama-based plan — see SESSION-HANDOFF.md.)
 
             # ── Claude via Anthropic API ───────────────────────────────────
             - model_name: claude-sonnet
@@ -107,26 +105,19 @@
                 model: anthropic/claude-sonnet-5
                 api_key: os.environ/ANTHROPIC_API_KEY
 
-            - model_name: claude-opus
-              litellm_params:
-                model: claude-opus-4-6
-                api_key: os.environ/ANTHROPIC_API_KEY
+            # claude-opus removed 2026-08-30 — a small fixed Anthropic credit
+            # ($20) with no per-model spend guard in place yet made it a
+            # real accidental-high-cost risk. Re-add once a spend guard
+            # exists (LiteLLM budgets/teams, see Future Enhancements).
+            # gemini-pro/gemini-flash removed 2026-08-30 — GEMINI_API_KEY is
+            # still a placeholder in Vault (superseded by the Azure Foundry
+            # work this session), so both would fail if selected regardless.
+            # Re-add once a real key is set via `make secrets`.
 
             - model_name: claude-haiku
               litellm_params:
                 model: anthropic/claude-haiku-4-5
                 api_key: os.environ/ANTHROPIC_API_KEY
-
-            # ── Gemini via Google AI API ───────────────────────────────────
-            - model_name: gemini-pro
-              litellm_params:
-                model: gemini/gemini-1.5-pro
-                api_key: os.environ/GEMINI_API_KEY
-
-            - model_name: gemini-flash
-              litellm_params:
-                model: gemini/gemini-1.5-flash
-                api_key: os.environ/GEMINI_API_KEY
 
             # ── Azure Foundry ────────────────────────────────────────────
             - model_name: gpt-4.1-mini
@@ -271,5 +262,5 @@
     msg:
       - "LiteLLM Gateway: http://{{ litellm_service_ip }}/v1"
       - "OpenAI-compatible endpoint for all your apps and agents"
-      - "Models available: all-minilm, phi3-mini (Jetson Nano), claude-sonnet, claude-opus, gemini-pro, gemini-flash"
-      - "Run 'make secrets' to configure your Anthropic and Gemini API keys"
+      - "Models available: claude-sonnet, claude-haiku, gpt-4.1-mini, orin-nx-gemma4-12b, orin-nano-gemma4-e2b"
+      - "Run 'make secrets' to configure your Gemini API key (still a placeholder) if you want to re-add gemini-pro/gemini-flash"

@@ -102,5 +102,9 @@
     msg:
       - "Jetson Nano Ollama: http://{{ ansible_host }}:{{ ollama_port }}"
       - "Embedding models: {{ ollama_models_nano | join(', ') }}"
-      - "LiteLLM routes: phi3-mini, all-minilm → this node"
       - "Tip: Use all-minilm for high-throughput embedding workloads"
+      # LiteLLM routes to this node (phi3-mini, all-minilm) were removed
+      # 2026-08-30 — the jetson_nano host this role targeted never existed
+      # in the live topology. Re-add those model_list entries in
+      # ansible/roles/litellm/tasks/main.yml if this role is ever pointed
+      # at a real host again.

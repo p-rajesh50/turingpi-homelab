@@ -1,5 +1,5 @@
 # TuringPi Homelab — Session Handoff Document
-# Date: July 26, 2026 (PostgreSQL live for LiteLLM, Cluster 2 CM4 flashing breakthrough, Longhorn backup NFSv3 fix, Cluster 2 K3s plan checkpoint — see STATUS below)
+# Date: August 30, 2026 (Redis-backed LiteLLM response caching, Open WebUI deployed and wired to LiteLLM at llm.kloud-worx.com — see STATUS below)
 # Use this to start a new Claude chat session with full context
 
 ---
@@ -1240,6 +1240,91 @@ accepting this as "probably fine":
   (`ansible/roles/litellm/tasks/main.yml`, comment above the two Jetson
   `model_list` entries) rather than left as a surprise for later.
 
+**August 30, 2026 — Redis-backed LiteLLM response caching deployed:**
+
+Added a small Redis instance (`ansible/roles/redis/`, namespace
+`litellm`, single replica, 2Gi Longhorn PVC, password-protected via a new
+`secret/redis` Vault path) and wired LiteLLM's built-in
+`litellm_settings.cache`/`cache_params` to it (`host: redis.litellm,
+port: 6379`). New playbook `17-redis.yml` / `make redis`, following the
+`postgresql` role's raw-manifest pattern (this is a co-located dependency
+of LiteLLM, same as Postgres, not a standalone app — Helm wasn't a fit
+here).
+
+**Verified end-to-end, not just "pod is Running"**: sent the identical
+request twice through the live gateway (10.0.0.40, `claude-haiku`,
+`temperature: 0`) — second call returned the same `chatcmpl-...` id,
+~24x faster (1.6s → 67ms), and the `x-litellm-cache-key` response header
+confirmed LiteLLM's actual cache-hit signal (checked the real header
+before assuming a body field existed). Two genuinely different prompts
+returned distinct ids and correct independent content — no false cache
+hits. `REDIS_PASSWORD` in the litellm pod's env confirmed byte-for-byte
+matching the Vault value via a file diff, not just non-empty.
+
+**August 30, 2026 — Open WebUI deployed, activating the long-reserved
+`llm.kloud-worx.com` hostname:**
+
+`llm.kloud-worx.com` had sat DNS/tunnel-reserved but unbacked since early
+in the project (repeatedly documented as "NOT LIVE" in CLAUDE.md/README).
+Deployed Open WebUI as a real chat UI in front of the LiteLLM gateway,
+closing that gap.
+
+**Precedent check paid off**: confirmed Open WebUI ships an official Helm
+chart before writing anything, so it followed the MinIO Helm pattern
+(`ansible/roles/minio/`), not the Postgres/Redis raw-manifest pattern —
+those exist specifically for custom, no-chart workloads. New role
+`ansible/roles/open-webui/`, own namespace (unlike Postgres/Redis, this
+is an independent user-facing app with its own state, not a co-located
+LiteLLM dependency), own self-provisioned `litellm-api-key` ExternalSecret
+pulling the *same* Vault path (`secret/llm-keys` / `LITELLM_MASTER_KEY`)
+LiteLLM itself uses — no new Vault secret needed. 15Gi Longhorn PVC,
+bundled SQLite (deliberately not the shared Postgres — that's LiteLLM's
+own budget/spend DB, kept separate). New playbook `18-open-webui.yml` /
+`make open-webui`.
+
+**Two real problems found and fixed during verification, not just
+"applied cleanly"**:
+- The chart's `pipelines.enabled` and `websocket.redis.enabled` default
+  to `true`, silently deploying two unplanned extra pods (a RAG/plugin
+  framework — explicitly out of scope pending the pending pgvector
+  investigation — and a bundled Redis only needed for multi-replica
+  chat-status sync at `replicaCount: 1`). Both disabled
+  (`pipelines.enabled=false`, `websocket.redis.enabled=false`,
+  `websocket.manager=""`) rather than left running with no purpose.
+- Initial 1Gi memory limit caused an immediate `OOMKilled` — Open WebUI
+  loads a sentence-transformers embedding model into memory on startup
+  by default, even with no knowledge base configured. Bumped to
+  `requests: 512Mi/200m`, `limits: 2Gi/1000m`; stable since.
+
+**Cloudflare Tunnel wiring**: activated the ingress rule that had sat as
+a "DEFERRED" comment in `ansible/roles/cloudflare-tunnel/tasks/main.yml`,
+and moved `llm.kloud-worx.com` from the excluded list into
+`cloudflare_access_hostnames` — joined the existing shared single-email
+Access policy (grafana/litellm/minio/etc.) rather than a dedicated
+multi-email one like research-forum-app/rf-pre-event-app, since this is
+single-user personal chat, not an external team app. **Real gotcha found
+and fixed**: `cloudflared` does not hot-reload its mounted `config.yaml`
+on a ConfigMap-only change — the new ingress rule was silently inert
+until a manual `kubectl rollout restart deployment/cloudflared`. Added
+that restart as a permanent step in the role so future ConfigMap-only
+changes (new hostnames) don't repeat this silently.
+
+**Verified end-to-end**: `https://llm.kloud-worx.com` returns a `302` to
+Google OAuth (Cloudflare Access) before ever reaching the app, same as
+every other protected service. After Access, the model dropdown lists
+all 5 LiteLLM-backed models (`claude-sonnet`, `claude-haiku`,
+`gpt-4.1-mini`, `orin-nx-gemma4-12b`, `orin-nano-gemma4-e2b`) — proves the
+OpenAI-compatible connection actually works, not just that the pod
+started. Sent real chat messages through both a cloud model
+(`claude-haiku`) and a local Jetson model (`orin-nano-gemma4-e2b`) and got
+real, correct responses. Signup deliberately disabled
+(`ENABLE_SIGNUP=false`, per explicit decision since Cloudflare Access
+already gates entry) — confirmed live: first signup succeeded and became
+admin, a second signup attempt returned `403`.
+
+Document-upload/RAG was explicitly left unwired — depends on the separate
+pending pgvector investigation, tracked as its own follow-up.
+
 ---
 
 ## Hardware — Cluster 1 (TuringPi 2.5)
@@ -1633,7 +1718,7 @@ https://portainer.kloud-worx.com  Portainer multi-cluster UI (Access-protected)
 https://truenas.kloud-worx.com    TrueNAS admin UI (Access-protected, live)
 https://prefect.kloud-worx.com    Prefect UI (Access-protected, not deployed yet)
 https://jupyter.kloud-worx.com    JupyterHub (not deployed yet, no Access policy)
-https://llm.kloud-worx.com        Open WebUI — not deployed (no Open WebUI/ingress wired here; llama-server runs directly on orin-nx/orin-nano LAN ports, see Aug 23-27, 2026 entry)
+https://llm.kloud-worx.com        Open WebUI chat UI, backed by LiteLLM (Access-protected, live — see Aug 30, 2026 entry)
 ```
 
 Local/direct (MetalLB, LAN only):

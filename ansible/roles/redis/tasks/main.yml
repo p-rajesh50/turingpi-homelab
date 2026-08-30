@@ -1,0 +1,4 @@
+---
+- name: Deploy Redis
+  ansible.builtin.include_tasks: deploy.yml
+  tags: [redis, redis-deploy]

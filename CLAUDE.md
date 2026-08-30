@@ -287,6 +287,11 @@ LiteLLM Gateway (http://10.0.0.40/v1)
         ├── model="orin-nx-gemma4-12b"     → orin-nx llama-server, no auth (10.0.0.14:8081)
         └── model="orin-nano-gemma4-e2b"   → orin-nano llama-server, no auth (10.0.0.50:8082)
 ```
+LiteLLM's built-in response caching (`litellm_settings.cache`) is backed by
+a small Redis instance (`redis.litellm:6379`, `ansible/roles/redis/`,
+`make redis`) — identical repeated requests are served from cache instead
+of hitting the upstream model again.
+
 See `ansible/roles/llama-cpp-jetson/README.md` for the full model/port
 table on both Jetsons (including the non-default alternates and the
 systemd `Conflicts=` mutual-exclusion mechanism), and
@@ -312,6 +317,7 @@ secret/llm-keys               ANTHROPIC_API_KEY (real), AZURE_FOUNDRY_API_KEY (r
                                kept for a future real key), LITELLM_MASTER_KEY
 secret/minio                  rootUser, rootPassword
 secret/postgres                POSTGRES_PASSWORD
+secret/redis                   REDIS_PASSWORD
 secret/tailscale               AUTH_KEY
 secret/cloudflare              TUNNEL_TOKEN, API_TOKEN, ZONE_ID, ACCOUNT_ID
 secret/gitea                   GITEA_ADMIN_USER, GITEA_ADMIN_PASSWORD, GITEA_ADMIN_EMAIL
@@ -384,6 +390,8 @@ make addons           # MetalLB, ingress-nginx, Prometheus, Grafana, Dashboard
 make vault            # HashiCorp Vault + External Secrets Operator
 make secrets          # store API keys interactively into Vault
 make ai-stack         # LiteLLM (others are stub roles, not deployed)
+make postgresql       # PostgreSQL for LiteLLM budget/team tracking
+make redis            # Redis for LiteLLM response caching
 make dev-tools        # Gitea + Actions runner
 
 # Remote access

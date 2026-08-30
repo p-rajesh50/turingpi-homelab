@@ -1,0 +1,3 @@
+---
+redis_version: "7-alpine"
+redis_storage_size: "2Gi"

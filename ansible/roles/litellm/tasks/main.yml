@@ -64,6 +64,10 @@
             remoteRef:
               key: secret/postgres
               property: POSTGRES_PASSWORD
+          - secretKey: REDIS_PASSWORD
+            remoteRef:
+              key: secret/redis
+              property: REDIS_PASSWORD
 
 - name: Apply llm-api-keys ExternalSecret
   ansible.builtin.command: kubectl apply -f /tmp/litellm-external-secret.yml
@@ -170,6 +174,12 @@
           litellm_settings:
             drop_params: true
             success_callback: []
+            cache: true
+            cache_params:
+              type: redis
+              host: redis.litellm
+              port: 6379
+              password: os.environ/REDIS_PASSWORD
 
           general_settings:
             master_key: os.environ/LITELLM_MASTER_KEY
@@ -263,4 +273,5 @@
       - "LiteLLM Gateway: http://{{ litellm_service_ip }}/v1"
       - "OpenAI-compatible endpoint for all your apps and agents"
       - "Models available: claude-sonnet, claude-haiku, gpt-4.1-mini, orin-nx-gemma4-12b, orin-nano-gemma4-e2b"
+      - "Response caching enabled via Redis (redis.litellm:6379) — requires make redis to have been run first"
       - "Run 'make secrets' to configure your Gemini API key (still a placeholder) if you want to re-add gemini-pro/gemini-flash"

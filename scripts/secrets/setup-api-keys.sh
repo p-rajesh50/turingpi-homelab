@@ -49,6 +49,7 @@ echo ""
 echo "── Storage ───────────────────────────────────────────────────"
 read -rsp "MinIO admin password: "  MINIO_PASSWORD;  echo ""
 read -rsp "Postgres password: "     POSTGRES_PASS;   echo ""
+read -rsp "Redis password: "        REDIS_PASSWORD;  echo ""
 
 echo ""
 echo "── Remote Access ─────────────────────────────────────────────"
@@ -74,6 +75,10 @@ info "Writing secrets to Vault..."
 [[ -n "$POSTGRES_PASS" ]] && vault kv put secret/postgres \
   POSTGRES_USER="postgres" POSTGRES_PASSWORD="$POSTGRES_PASS" \
   && success "Postgres → secret/postgres"
+
+[[ -n "$REDIS_PASSWORD" ]] && vault kv put secret/redis \
+  REDIS_PASSWORD="$REDIS_PASSWORD" \
+  && success "Redis → secret/redis"
 
 [[ -n "$TAILSCALE_KEY" ]] && vault kv put secret/tailscale \
   AUTH_KEY="$TAILSCALE_KEY" \

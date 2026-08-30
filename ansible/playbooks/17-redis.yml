@@ -1,0 +1,17 @@
+---
+# ansible/playbooks/17-redis.yml
+# Deploys Redis for LiteLLM's built-in response caching. Requires Vault +
+# External Secrets Operator (make vault).
+#
+# Usage:
+#   make redis
+#   ansible-playbook ... --tags redis-deploy
+
+- name: Deploy Redis for LiteLLM caching
+  hosts: k8s_control
+  become: false
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+  roles:
+    - role: redis

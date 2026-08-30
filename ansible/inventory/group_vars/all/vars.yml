@@ -97,9 +97,15 @@ litellm_version: "1.40.0"
 litellm_master_key: ""               # Set via: make secrets (stored in K8s Secret)
 litellm_service_ip: "10.0.0.40"     # from MetalLB pool (10.0.0.30 taken by ingress-nginx)
 
-# Open WebUI
+# Open WebUI (standalone jetson-orin docker-compose plan — deferred/unused,
+# see ansible/roles/jetson-orin/README note)
 open_webui_port: 3000
 open_webui_version: "latest"
+
+# Open WebUI (k8s deployment via Helm, ansible/roles/open-webui — LIVE,
+# backed by LiteLLM, exposed at llm.kloud-worx.com)
+open_webui_chart_version: "16.1.0"
+open_webui_storage_size: "15Gi"
 
 # Qdrant vector database
 qdrant_version: "1.9.0"

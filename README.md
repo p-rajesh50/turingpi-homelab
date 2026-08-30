@@ -209,6 +209,7 @@ detailed walkthrough of the same sequence.
 | Headlamp | http://10.0.0.38 | https://headlamp.kloud-worx.com |
 | Portainer | http://10.0.0.39 | https://portainer.kloud-worx.com |
 | LiteLLM Gateway | http://10.0.0.40/v1 | https://litellm.kloud-worx.com |
+| Open WebUI | *(ClusterIP only — see Operations)* | https://llm.kloud-worx.com |
 | Vault | *(ClusterIP only — see Operations)* | https://vault.kloud-worx.com |
 
 All public URLs above are Cloudflare Access-protected (Google OAuth).
@@ -216,10 +217,6 @@ All public URLs above are Cloudflare Access-protected (Google OAuth).
 **Reserved, not yet deployed**: `prefect.kloud-worx.com`,
 `jupyter.kloud-worx.com` (DNS/Access records exist, no workload behind them
 yet — Prefect/JupyterHub remain stub roles).
-
-**`llm.kloud-worx.com` — NOT LIVE**: no Open WebUI deployment exists
-anywhere in the cluster (confirmed via `kubectl get pods -A`). Do not
-present this hostname as live in any doc or demo.
 
 ## Operations
 

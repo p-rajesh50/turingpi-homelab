@@ -10,7 +10,8 @@ cloudflare_access_allowed_email: "rajesh.pamulapati@gmail.com"
 cloudflare_tunnel_name: "turingpi-homelab"
 
 # All hostnames routed by the tunnel's ingress config (superset of
-# cloudflare_access_hostnames — llm and jupyter have no Access policy).
+# cloudflare_access_hostnames — jupyter has no Access policy; llm now does,
+# see cloudflare_access_hostnames below).
 cloudflare_tunnel_hostnames:
   - vault.kloud-worx.com
   - grafana.kloud-worx.com
@@ -26,8 +27,8 @@ cloudflare_tunnel_hostnames:
   - research-forum.kloud-worx.com
   - rf-pre-event.kloud-worx.com
 
-# Hostnames protected by Cloudflare Access. jupyter.kloud-worx.com and
-# llm.kloud-worx.com are intentionally left out of this list.
+# Hostnames protected by Cloudflare Access. jupyter.kloud-worx.com is
+# intentionally left out of this list.
 # research-forum.kloud-worx.com and gitea.kloud-worx.com are intentionally
 # left out too — each has its own independent Access Application/Policy
 # provisioned by research-forum-access.yml / gitea-access.yml, not the
@@ -41,6 +42,7 @@ cloudflare_access_hostnames:
   - vault.kloud-worx.com
   - prefect.kloud-worx.com
   - truenas.kloud-worx.com
+  - llm.kloud-worx.com
 
 # Research Forum App — separate Access policy, two allowed identities
 # instead of the single shared cloudflare_access_allowed_email above.

@@ -1,0 +1,16 @@
+---
+# ansible/playbooks/18-open-webui.yml
+# Deploys Open WebUI (chat UI backed by LiteLLM). Requires Vault +
+# External Secrets Operator (make vault) and LiteLLM (make ai-stack).
+#
+# Usage:
+#   make open-webui
+
+- name: Deploy Open WebUI
+  hosts: k8s_control
+  become: false
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+  roles:
+    - role: open-webui

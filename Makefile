@@ -169,6 +169,11 @@ redis: vault-check
 	ansible-playbook ansible/playbooks/17-redis.yml \
 		-i $(INVENTORY) --tags redis $(ANSIBLE_ARGS)
 
+.PHONY: open-webui
+open-webui: vault-check
+	ansible-playbook ansible/playbooks/18-open-webui.yml \
+		-i $(INVENTORY) $(ANSIBLE_ARGS)
+
 .PHONY: gitea-runner-rbac
 gitea-runner-rbac:
 	ansible-playbook ansible/playbooks/14-gitea-runner-rbac.yml \

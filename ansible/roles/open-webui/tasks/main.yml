@@ -1,0 +1,112 @@
+---
+# Open WebUI — chat UI backed entirely by LiteLLM's OpenAI-compatible
+# gateway (no bundled Ollama). Own namespace since it's an independent
+# user-facing app with its own persistent state (accounts, chat history),
+# not a co-located dependency the way Redis/Postgres are of LiteLLM.
+# Document-upload/RAG is intentionally not wired in here — separate
+# follow-up pending the pgvector investigation.
+
+- name: Create open-webui namespace
+  ansible.builtin.shell: kubectl create namespace open-webui --dry-run=client -o yaml | kubectl apply -f -
+  args:
+    executable: /bin/bash
+  changed_when: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+# Self-provisioned here (same reasoning litellm/postgresql give for their
+# own ExternalSecrets) rather than relying on a shared cross-namespace
+# secret — pulls the SAME Vault path LiteLLM already uses, just synced
+# into this namespace too.
+- name: Create litellm-api-key ExternalSecret
+  ansible.builtin.copy:
+    dest: /tmp/open-webui-external-secret.yml
+    mode: "0644"
+    content: |
+      ---
+      apiVersion: external-secrets.io/v1
+      kind: ExternalSecret
+      metadata:
+        name: litellm-api-key
+        namespace: open-webui
+      spec:
+        refreshInterval: 1m
+        secretStoreRef:
+          name: vault-backend
+          kind: ClusterSecretStore
+        target:
+          name: litellm-api-key
+          creationPolicy: Owner
+        data:
+          - secretKey: LITELLM_MASTER_KEY
+            remoteRef:
+              key: secret/llm-keys
+              property: LITELLM_MASTER_KEY
+
+- name: Apply litellm-api-key ExternalSecret
+  ansible.builtin.command: kubectl apply -f /tmp/open-webui-external-secret.yml
+  changed_when: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+- name: Wait for litellm-api-key secret to sync from Vault
+  ansible.builtin.command: >
+    kubectl wait externalsecret/litellm-api-key -n open-webui
+    --for=condition=Ready --timeout=90s
+  changed_when: false
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+- name: Add Open WebUI Helm repo
+  ansible.builtin.command: helm repo add open-webui https://helm.openwebui.com/
+  changed_when: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+- name: Update Helm repos
+  ansible.builtin.command: helm repo update
+  changed_when: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+
+# pipelines.enabled and websocket.redis.enabled default to true in this
+# chart — Pipelines is a RAG/plugin-extension framework (out of scope,
+# pending the separate pgvector investigation) and the bundled websocket
+# Redis is only needed for multi-replica chat-status sync (replicaCount=1
+# here), so both are disabled to avoid deploying two unplanned sidecar
+# workloads with no purpose at this scale.
+- name: Install Open WebUI
+  ansible.builtin.command: >
+    helm upgrade --install open-webui open-webui/open-webui
+    --namespace open-webui
+    --version {{ open_webui_chart_version }}
+    --set ollama.enabled=false
+    --set pipelines.enabled=false
+    --set websocket.redis.enabled=false
+    --set-string websocket.manager=""
+    --set openaiBaseApiUrl=http://litellm.litellm.svc.cluster.local/v1
+    --set openaiApiKeyExistingSecret=litellm-api-key
+    --set openaiApiKeyExistingSecretKey=LITELLM_MASTER_KEY
+    --set persistence.enabled=true
+    --set persistence.storageClass=longhorn
+    --set persistence.size={{ open_webui_storage_size }}
+    --set service.type=ClusterIP
+    --set service.port=80
+    --set extraEnvVars[0].name=ENABLE_SIGNUP
+    --set-string extraEnvVars[0].value="false"
+    --set resources.requests.memory=512Mi
+    --set resources.requests.cpu=200m
+    --set resources.limits.memory=2Gi
+    --set resources.limits.cpu=1000m
+    --no-hooks
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  changed_when: true
+
+- name: Print Open WebUI summary
+  ansible.builtin.debug:
+    msg:
+      - "Open WebUI: open-webui.open-webui.svc.cluster.local:80 (internal only)"
+      - "Backend: LiteLLM gateway (http://litellm.litellm.svc.cluster.local/v1) — all 5 models available"
+      - "Signup disabled (ENABLE_SIGNUP=false) — Cloudflare Access is the auth boundary; first login becomes admin"
+      - "Exposed externally via Cloudflare Tunnel at https://llm.kloud-worx.com — see cloudflare-tunnel role"

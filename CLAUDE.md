@@ -116,9 +116,16 @@ regardless. `ANTHROPIC_API_KEY` and `AZURE_FOUNDRY_API_KEY`/
 `GEMINI_API_KEY` remains an unused placeholder — re-add Gemini routes once
 it's replaced via `make secrets`.
 
-**Open WebUI is NOT deployed anywhere** — confirmed live, no such
-workload exists in any namespace. `llm.kloud-worx.com` has no backing
-service; do not present it as live in any doc.
+**Open WebUI is live** (namespace `open-webui`, Helm-deployed via
+`ansible/roles/open-webui/`, `make open-webui`) — chat UI backed entirely
+by the LiteLLM gateway (all 5 models), exposed at
+`https://llm.kloud-worx.com` via Cloudflare Tunnel + Access (same
+single-email Google OAuth policy as grafana/litellm/etc). Uses its own
+bundled SQLite for accounts/chat history (deliberately not the shared
+Postgres instance — that's LiteLLM's own budget/spend database, kept
+separate). Signup disabled (`ENABLE_SIGNUP=false`); first login became
+the admin account. Document-upload/RAG is NOT wired in — pending the
+separate pgvector investigation.
 
 **Not yet done**: Cluster 2 live bring-up (code exists, not run), TrueNAS
 SMB/NFS media exports, Whisper speech-to-text, LiteLLM teams/budgets for
@@ -162,7 +169,10 @@ turingpi-homelab/
 │   │   ├── 09-vault.yml                   ← make vault
 │   │   ├── 10-tailscale.yml               ← make tailscale
 │   │   ├── 11-cloudflare-tunnel.yml       ← make cloudflare
+│   │   ├── 13-postgresql.yml              ← make postgresql (LiteLLM budget/team tracking)
 │   │   ├── 16-llama-cpp-jetson.yml        ← make llama-cpp-jetson (Phase 0/1, orin-nx + orin-nano)
+│   │   ├── 17-redis.yml                   ← make redis (LiteLLM response caching)
+│   │   ├── 18-open-webui.yml              ← make open-webui (chat UI, backed by LiteLLM)
 │   │   ├── 20-cluster2-kubernetes.yml     ← make cluster2-k3s (code-complete, not yet run live)
 │   │   ├── 21-cluster2-longhorn.yml       ← make cluster2-longhorn (code-complete, not yet run live)
 │   │   └── 22-cluster2-metallb.yml        ← make cluster2-metallb (code-complete, not yet run live)
@@ -171,6 +181,9 @@ turingpi-homelab/
 │       ├── k3s-server/ k3s-agent/         ← K3s install/join
 │       ├── longhorn/ nfs-server/ minio/   ← storage
 │       ├── litellm/                       ← AI gateway (see model_list above)
+│       ├── postgresql/                    ← LiteLLM budget/team/spend tracking DB
+│       ├── redis/                         ← LiteLLM response caching
+│       ├── open-webui/                    ← chat UI (Helm-based), backed by LiteLLM
 │       ├── qdrant/ jupyterhub/ langraph-server/ prefect/ mcp-servers/  ← stub roles, not deployed
 │       ├── gitea/                         ← self-hosted Git + CI/CD + package-registry retention CronJob
 │       ├── vault/ external-secrets/       ← secrets
@@ -276,10 +289,11 @@ tpi --host $BMC_IP --user $BMC_USER --password $BMC_PASSWORD power off --node 1
 ## AI/ML Stack Architecture
 
 ```
-Your apps / agents / notebooks
-        │
-        ▼ OpenAI-compatible API
-LiteLLM Gateway (http://10.0.0.40/v1)
+Open WebUI (https://llm.kloud-worx.com)      Your apps / agents / notebooks
+        │                                             │
+        └───────────────┬─────────────────────────────┘
+                         ▼ OpenAI-compatible API
+        LiteLLM Gateway (http://10.0.0.40/v1)
         │
         ├── model="claude-sonnet"          → Anthropic API (anthropic/claude-sonnet-5)
         ├── model="claude-haiku"           → Anthropic API (anthropic/claude-haiku-4-5)
@@ -291,6 +305,14 @@ LiteLLM's built-in response caching (`litellm_settings.cache`) is backed by
 a small Redis instance (`redis.litellm:6379`, `ansible/roles/redis/`,
 `make redis`) — identical repeated requests are served from cache instead
 of hitting the upstream model again.
+
+Open WebUI (namespace `open-webui`, `ansible/roles/open-webui/`, `make
+open-webui`) is a chat UI in front of LiteLLM — all 5 models above are
+selectable in its model dropdown. It authenticates to LiteLLM with the
+same `LITELLM_MASTER_KEY` (synced into the `open-webui` namespace via its
+own ExternalSecret pointing at the same `secret/llm-keys` Vault path), and
+uses its own bundled SQLite for accounts/chat history rather than the
+shared Postgres instance below.
 
 See `ansible/roles/llama-cpp-jetson/README.md` for the full model/port
 table on both Jetsons (including the non-default alternates and the
@@ -314,7 +336,9 @@ secret/llm-keys               ANTHROPIC_API_KEY (real), AZURE_FOUNDRY_API_KEY (r
                                AZURE_FOUNDRY_API_BASE (real), GEMINI_API_KEY (still
                                placeholder, AND unused — gemini-pro/gemini-flash were
                                removed from model_list 2026-08-30; ExternalSecret wiring
-                               kept for a future real key), LITELLM_MASTER_KEY
+                               kept for a future real key), LITELLM_MASTER_KEY (also
+                               synced into the open-webui namespace via its own
+                               ExternalSecret — same Vault path, no separate secret)
 secret/minio                  rootUser, rootPassword
 secret/postgres                POSTGRES_PASSWORD
 secret/redis                   REDIS_PASSWORD
@@ -362,9 +386,7 @@ https://research-forum.kloud-worx.com  Client app (Gitea CI-deployed) — LIVE
 https://rf-pre-event.kloud-worx.com    Client app (Gitea CI-deployed) — LIVE
 https://prefect.kloud-worx.com    Reserved — no workload deployed (Prefect is a stub role)
 https://jupyter.kloud-worx.com    Reserved — no workload deployed (JupyterHub is a stub role)
-https://llm.kloud-worx.com        NOT LIVE — no Open WebUI deployment exists anywhere in the
-                                   cluster (confirmed via kubectl). Do not present this as
-                                   live/wired in any doc or demo.
+https://llm.kloud-worx.com        Open WebUI chat UI, backed by LiteLLM — LIVE
 ```
 
 ---
@@ -392,6 +414,7 @@ make secrets          # store API keys interactively into Vault
 make ai-stack         # LiteLLM (others are stub roles, not deployed)
 make postgresql       # PostgreSQL for LiteLLM budget/team tracking
 make redis            # Redis for LiteLLM response caching
+make open-webui       # Open WebUI chat UI, backed by LiteLLM
 make dev-tools        # Gitea + Actions runner
 
 # Remote access
@@ -596,10 +619,8 @@ agent = Agent(
    gets written to disk. `node_static_ip` is set per-host in `hosts.yml`.
 8. **Storage devices:** NVMe=`/dev/nvme0n1` (Longhorn, slot 2+4), SATA (NFS, rk1-worker-1
    in slot 2 via mini-PCIe adapter — device path confirmed `/dev/sda2`)
-9. **Do not present `llm.kloud-worx.com`/Open WebUI as live** in any doc, demo, or
-   summary — confirmed no such deployment exists.
-10. **`GEMINI_API_KEY` is still a placeholder** — Gemini routes in LiteLLM will not
-    authenticate until `make secrets` is re-run with a real key.
+9. **`GEMINI_API_KEY` is still a placeholder** — Gemini routes in LiteLLM will not
+   authenticate until `make secrets` is re-run with a real key.
 
 ---
 
@@ -627,11 +648,10 @@ Not scheduled — ideas to revisit once bandwidth allows. Ranked by priority.
 
 6. **Nvidia Device Plugin + Jetson Exporter** — GPU scheduling and metrics for orin-nx/orin-nano.
 
-7. **Local Coding Assistant** — Open WebUI + Continue.dev VS Code extension wired to the
-   existing Phase 1 llama-server endpoints. Self-hosted GitHub Copilot alternative with no
-   token limits. Partially superseded by Phase 1's direct llama-server approach — evaluate
-   whether Open WebUI adds enough value to deploy, or whether direct LiteLLM routing (already
-   live) is sufficient.
+7. **Local Coding Assistant** — Continue.dev VS Code extension wired to the existing Phase 1
+   llama-server endpoints (via LiteLLM or directly). Self-hosted GitHub Copilot alternative
+   with no token limits. Open WebUI itself is now live (see AI/ML Stack Architecture) — this
+   item is specifically about IDE integration, not the chat UI.
 
 8. **Whisper large-v3 speech-to-text** on the Phase 1 Jetson hardware — not yet started.
 

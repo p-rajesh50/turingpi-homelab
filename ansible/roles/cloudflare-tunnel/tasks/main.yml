@@ -68,9 +68,9 @@
             - hostname: gitea.kloud-worx.com
               service: http://gitea-http.gitea.svc.cluster.local:3000
 
-            # Open WebUI — DEFERRED, Orin NX module removed from the board (see
-            # CLAUDE.md Hardware section). Re-add the llm.kloud-worx.com route
-            # here once Orin NX is reinstalled and Open WebUI is deployed.
+            # Open WebUI — chat UI backed by LiteLLM (ansible/roles/open-webui)
+            - hostname: llm.kloud-worx.com
+              service: http://open-webui.open-webui.svc.cluster.local:80
 
             # LiteLLM AI Gateway API
             - hostname: litellm.kloud-worx.com
@@ -174,6 +174,16 @@
     KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
   tags: [tunnel]
 
+# cloudflared does not hot-reload its mounted config.yaml on ConfigMap
+# changes — a ConfigMap-only edit (e.g. adding an ingress hostname) is
+# silently inert until the pods restart and re-read it from disk.
+- name: Restart cloudflared to pick up config changes
+  ansible.builtin.command: kubectl rollout restart deployment/cloudflared -n cloudflare-tunnel
+  changed_when: true
+  environment:
+    KUBECONFIG: "/home/{{ admin_user }}/.kube/config"
+  tags: [tunnel]
+
 - name: Print Cloudflare Tunnel summary
   ansible.builtin.debug:
     msg:
@@ -182,6 +192,7 @@
       - "  https://grafana.kloud-worx.com    ← Grafana"
       - "  https://jupyter.kloud-worx.com    ← JupyterHub"
       - "  https://gitea.kloud-worx.com      ← Gitea"
+      - "  https://llm.kloud-worx.com        ← Open WebUI (LiteLLM-backed chat)"
       - "  https://litellm.kloud-worx.com    ← LiteLLM API"
       - "  https://minio.kloud-worx.com      ← MinIO Console"
       - "  https://prefect.kloud-worx.com    ← Prefect UI"

@@ -7,8 +7,11 @@ provisioned from this repo via Ansible and exposed to the internet with
 zero open inbound ports.
 
 **Live status**: Cluster 1 (TuringPi 2.5 + 3× RK1) is fully built and
-verified end-to-end. Cluster 2 (TuringPi 2 + CM4) and the standalone Jetson
-Nano/Orin NX nodes are future work — see [Known Limitations](#known-limitations).
+verified end-to-end. Two standalone Jetson nodes (Orin NX, Jetson Orin
+Nano — see Network Layout) are also live, running `llama.cpp` in
+OpenAI-compatible server mode and wired into the LiteLLM gateway. There
+is no separate "Jetson Nano" device. Cluster 2 (TuringPi 2 + CM4) is
+code-complete but not yet running live — see [Known Limitations](#known-limitations).
 
 ## Overview
 
@@ -18,7 +21,7 @@ Nano/Orin NX nodes are future work — see [Known Limitations](#known-limitation
 - **Secrets**: [HashiCorp Vault](https://www.vaultproject.io/) + [External Secrets Operator](https://external-secrets.io/) (syncs Vault → Kubernetes Secrets)
 - **Networking**: [MetalLB](https://metallb.universe.tf/) (LoadBalancer IPs), [ingress-nginx](https://kubernetes.github.io/ingress-nginx/), [Cilium](https://cilium.io/) (CNI + pod networking)
 - **Remote access**: [Tailscale](https://tailscale.com/) (direct node SSH/kubectl, control-plane only), [Cloudflare Tunnel](https://www.cloudflare.com/products/tunnel/) + Access (public web UIs, zero open ports)
-- **AI gateway**: [LiteLLM](https://www.litellm.ai/) (unified OpenAI-compatible API, routes to Anthropic/Gemini cloud APIs today; local Ollama routes are wired but not live — see Limitations)
+- **AI gateway**: [LiteLLM](https://www.litellm.ai/) (unified OpenAI-compatible API — routes to Anthropic and Azure Foundry cloud APIs, plus two live local `llama.cpp` routes on the standalone Jetson nodes; no Ollama routes exist)
 - **Dev tooling**: [Gitea](https://gitea.io/) + Actions CI/CD
 - **Observability**: [Prometheus](https://prometheus.io/) + [Grafana](https://grafana.com/), [Headlamp](https://headlamp.dev/) and [Portainer](https://www.portainer.io/) for K8s UIs
 - **Automation**: [Ansible](https://www.ansible.com/) (every layer is a role/playbook), driven by a single `Makefile`
@@ -80,11 +83,15 @@ flowchart TB
         Worker1 --> NFS
     end
 
-    LiteLLM -->|cloud routes| Anthropic[Anthropic API]
-    LiteLLM -->|cloud routes| Gemini[Google Gemini API]
-    LiteLLM -.->|wired, not live| OrinDeferred["Orin NX (deferred,<br/>module removed from board)"]
-    LiteLLM -.->|wired, not live| NanoTBD["Jetson Nano<br/>(not configured yet)"]
+    LiteLLM -->|cloud routes| Anthropic["Anthropic API<br/>claude-sonnet, claude-haiku"]
+    LiteLLM -->|cloud routes| AzureFoundry["Azure Foundry<br/>gpt-4.1-mini"]
+    LiteLLM -->|local, no auth| OrinNX["orin-nx (standalone, Slot 3)<br/>10.0.0.14<br/>llama-server: gemma4-12b"]
+    LiteLLM -->|local, no auth| OrinNano["orin-nano (standalone)<br/>10.0.0.50<br/>llama-server: gemma4-e2b"]
 ```
+Gemini routes (`gemini-pro`/`gemini-flash`) were removed from LiteLLM's
+`model_list` — `GEMINI_API_KEY` in Vault is still a placeholder, so both
+would fail if selected regardless. Re-add once a real key is set via
+`make secrets`.
 
 ## Hardware Requirements
 
@@ -112,14 +119,17 @@ flowchart TB
 10.0.0.11         rk1-control   (slot 1) — also Tailscale subnet router
 10.0.0.12         rk1-worker-1  (slot 2) — also NFS server
 10.0.0.13         rk1-worker-2  (slot 4)
-                  slot 3 — EMPTY / FAULTY, never assign a node here
-10.0.0.50         orin-nano     (standalone, Jetson Orin Nano)
+                  slot 3 — EMPTY for K3s, physically occupied by standalone orin-nx (below)
+10.0.0.14         orin-nx       (standalone, llama.cpp — see Live status above)
 10.0.0.30-49      MetalLB LoadBalancer pool (Cluster 1)
+10.0.0.50         orin-nano     (standalone, Jetson Orin Nano, llama.cpp)
 10.0.0.100-199    DHCP pool (router managed)
 ```
 
-Cluster 2 (TuringPi 2 + CM4, `10.0.0.20-24`) and TrueNAS (`10.0.0.5`) are
-planned but not built yet — see [Known Limitations](#known-limitations).
+Cluster 2 (TuringPi 2 + CM4, `10.0.0.20-24`) is code-complete but not yet
+running live, and TrueNAS (`10.0.0.5`) is live for admin access but not
+yet fully configured for media/backup exports — see
+[Known Limitations](#known-limitations).
 
 **MetalLB pool**: `10.0.0.30-10.0.0.49` (20 IPs) — 7 currently assigned, see
 [Services](#services) below.
@@ -205,7 +215,11 @@ All public URLs above are Cloudflare Access-protected (Google OAuth).
 
 **Reserved, not yet deployed**: `prefect.kloud-worx.com`,
 `jupyter.kloud-worx.com` (DNS/Access records exist, no workload behind them
-yet), `llm.kloud-worx.com` (Open WebUI, deferred — see Limitations).
+yet — Prefect/JupyterHub remain stub roles).
+
+**`llm.kloud-worx.com` — NOT LIVE**: no Open WebUI deployment exists
+anywhere in the cluster (confirmed via `kubectl get pods -A`). Do not
+present this hostname as live in any doc or demo.
 
 ## Operations
 
@@ -238,13 +252,14 @@ yet), `llm.kloud-worx.com` (Open WebUI, deferred — see Limitations).
   stays on eMMC there. Not currently a problem (eMMC usage is well under
   70%), but it means the control-plane node can't host Longhorn replicas or
   benefit from the NVMe symlink migration the workers use.
-- **LiteLLM's UI requires PostgreSQL**, which isn't deployed yet — spend
-  tracking and user/team management return "not connected to DB" until a
-  Postgres backend is added (tracked in `CLAUDE.md`'s Future Enhancements
-  Backlog).
-- **Anthropic and Gemini API keys are placeholders** — `make secrets` must
-  be re-run with real keys before LiteLLM's cloud model routes will
-  actually authenticate.
+- **`GEMINI_API_KEY` is a placeholder and currently unused** — Gemini
+  routes were removed from LiteLLM's `model_list` (see AI/ML routing
+  above); `make secrets` must be re-run with a real key before re-adding
+  them. `ANTHROPIC_API_KEY` and the Azure Foundry keys are real and live.
+- **`claude-opus` is intentionally not in LiteLLM's `model_list`** —
+  removed to prevent accidental high-cost usage against a small fixed
+  Anthropic credit with no per-model spend guard in place yet (tracked in
+  `CLAUDE.md`'s Future Enhancements Backlog).
 
 ## Repository Structure
 
@@ -257,11 +272,13 @@ turingpi-homelab/
 │   ├── inventory/
 │   │   ├── hosts.yml            # Node definitions and IPs
 │   │   └── group_vars/all/vars.yml  # All variables (IPs, versions, sizes)
-│   ├── playbooks/                # 00-bootstrap through 11-cloudflare-tunnel
+│   ├── playbooks/                # 00-bootstrap through 22-cluster2-metallb, plus
+│   │                              # 16-llama-cpp-jetson (standalone Jetsons)
 │   └── roles/                    # One role per service: common, k3s-server,
 │                                  # k3s-agent, longhorn, nfs-server, minio,
 │                                  # litellm, vault, external-secrets,
-│                                  # tailscale, cloudflare-tunnel, gitea, ...
+│                                  # tailscale, cloudflare-tunnel, gitea,
+│                                  # llama-cpp-jetson (has its own README.md), ...
 ├── scripts/
 │   ├── workstation/setup.sh      # New machine setup
 │   ├── bmc/bmc-power.sh          # Node power control via BMC
@@ -270,12 +287,20 @@ turingpi-homelab/
 │   └── maintenance/
 │       ├── health-check.sh       # Basic cluster health check
 │       ├── cluster-lifecycle.sh  # shutdown / startup / health-check, --dry-run
-│       └── teardown.sh           # K3s-native cluster reset
+│       ├── teardown.sh           # K3s-native cluster reset
+│       └── llama-serve-test.sh   # Smoke test for llama-server endpoints
+├── tools/
+│   └── tool-calling-harness/     # Standalone Python harness scoring tool-calling
+│                                  # reliability (not an Ansible role) — has its
+│                                  # own README.md and results/SUMMARY.md
 ├── kubernetes/
 │   └── helm-values/              # Helm chart value overrides (e.g. Grafana)
 ├── docs/
-│   ├── day0-runbook.md           # Full setup guide
-│   ├── runbook.md                # Operational troubleshooting playbook
-│   └── medium-series-outline.md  # Planned Medium article series
-└── cluster2/                     # TuringPi 2 + CM4 cluster — future, not started
+│   ├── day0-runbook.md           # Day-0 hardware/software bring-up checklist
+│   ├── git-setup.md              # GitHub repo init instructions
+│   ├── jetson-orin-flash.md      # JetPack flash guide (predates the standalone
+│   │                              # llama.cpp approach — verify relevance first)
+│   ├── medium-series-outline.md  # Planned Medium article series
+│   └── runbook.md                # Operational troubleshooting playbook
+└── cluster2/                     # TuringPi 2 + CM4 cluster — code-complete, not yet live
 ```

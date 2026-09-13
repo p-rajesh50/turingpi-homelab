@@ -2012,6 +2012,23 @@ Backup target for Longhorn — ✅ configured (NFSv3 forced, see July 26, 2026
 
 ---
 
+## 2026-09-12/13 — Cluster 2 hardware migration: TuringPi 2 → DeskPi Super6C complete (4 → 6 nodes)
+
+- Migrated all Cluster 2 modules from TuringPi 2 to DeskPi Super6C, expanding from 4 to 6 nodes
+- Final topology:
+  - cm4-node-1: CM4, eMMC, 10.0.0.21, control-plane
+  - cm4-node-2: CM5 Lite (no eMMC), 10.0.0.22, migrated from microSD to NVMe boot (dd clone + resize2fs, NVMe-first EEPROM boot order was already default)
+  - cm4-node-3: CM4, eMMC, 10.0.0.23 — original module recovered from apparent hardware fault (was actually an nRPIBOOT jumper placement issue, not dead hardware), then fresh-flashed (Raspberry Pi OS Trixie 2026-06-18, cloud-init)
+  - cm4-node-4: CM4, eMMC, 10.0.0.24
+  - cm4-node-5: new CM4 (32GB eMMC), 10.0.0.25, 1TB NVMe for Longhorn
+  - cm4-node-6: new CM4 (32GB eMMC), 10.0.0.26, 512GB NVMe for Longhorn
+- Storage model: CM4 nodes boot from eMMC, NVMe used purely as a Longhorn data disk (no OS clone). CM5 boots from and shares its NVMe for OS + Longhorn data.
+- Power: switched to Thermaltake Smart 500W ATX PSU (4-pin EPS connector) to support CM5 + NVMe load. Super6C has no BMC — power-cycling is a hard cut via the PSU switch, affecting all 6 nodes simultaneously. Always `sync` after config changes before power-cycling.
+- All 6 nodes: static IPs via `netplan-eth0` (NetworkManager renderer), cloud-init network management permanently disabled (`/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg`) to prevent future DHCP reversion on re-flash.
+- Remaining: mount+register NVMe as Longhorn disk on nodes 1/3/4/5/6, full Ansible provisioning on nodes 3/5/6 (K3s join, ufw, iscsi, netplan), inventory update, then observability stack migration from Cluster 1.
+
+---
+
 ## Recommended Starting Prompt for New Session
 
 ```

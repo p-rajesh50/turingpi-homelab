@@ -43,17 +43,14 @@ agentic app runtime, secrets management, and remote access.
 
 **Note**: there is no "Jetson Nano" device — a device once planned for 10.0.0.15 was upgraded to a Super Developer Kit and reassigned as `orin-nano` (10.0.0.50) before ever being deployed at the old IP. 10.0.0.15 was never used in the live topology; the `jetson_nano` inventory group was removed 2026-08-30. The `jetson_orin` inventory group (for the original in-cluster Ollama/Open-WebUI plan, `07-jetson-orin.yml`) is kept empty/reserved — that plan was superseded by the standalone `jetson_llm`/llama.cpp approach above.
 
-### Cluster 2 — TuringPi 2 + CM4
+### Cluster 2: DeskPi Super6C, 6 nodes (migrated from TuringPi 2, 4 nodes)
+- cm4-node-1 (10.0.0.21, control-plane), cm4-node-2 (10.0.0.22, CM5, NVMe boot),
+  cm4-node-3 (10.0.0.23), cm4-node-4 (10.0.0.24), cm4-node-5 (10.0.0.25, 1TB NVMe),
+  cm4-node-6 (10.0.0.26, 512GB NVMe)
+- All CM4 nodes boot from eMMC; NVMe reserved for Longhorn data (except node-2, NVMe-boot)
+- No BMC on this board — power-cycle via PSU switch only, always sync first
 
-| Device | Hostname | IP |
-|---|---|---|
-| BMC | tpi2-bmc | 10.0.0.20 |
-| CM4 Node 1 | cm4-node-1 | 10.0.0.21 |
-| CM4 Node 2 | cm4-node-2 | 10.0.0.22 |
-| CM4 Node 3 | cm4-node-3 | 10.0.0.23 |
-| CM4 Node 4 | cm4-node-4 | 10.0.0.24 |
-
-**Status**: all 4 nodes flashed, reachable, and stable (survived a full power-cycle test). K3s bring-up is **code-complete** (forked `k3s-server-cm4`/`k3s-agent-cm4` roles, isolated `cm4_nodes`/`cluster2` inventory groups, playbooks `20-22-cluster2-*.yml`) but **not yet run against the live nodes** — no live K3s cluster exists here yet. Known gap once run: no UFW/fail2ban/chrony hardening forked in yet (only swap-disable).
+**Status**: all 6 nodes flashed, reachable, and stable on the DeskPi Super6C (migrated 2026-09-12/13, see `SESSION-HANDOFF.md`). K3s bring-up is **code-complete** (forked `k3s-server-cm4`/`k3s-agent-cm4` roles, isolated `cm4_nodes`/`cluster2` inventory groups, playbooks `20-22-cluster2-*.yml`) but **not yet run against the live nodes** — no live K3s cluster exists here yet. Remaining: mount+register NVMe as Longhorn disk on nodes 1/3/4/5/6, full Ansible provisioning on nodes 3/5/6 (K3s join, ufw, iscsi, netplan), inventory update. Known gap once run: no UFW/fail2ban/chrony hardening forked in yet (only swap-disable).
 
 ### TrueNAS
 
@@ -74,7 +71,7 @@ agentic app runtime, secrets management, and remote access.
 10.0.0.13         rk1-worker-2 (slot 4)
                   slot 3 — EMPTY for K3s, physically occupied by standalone orin-nx (see Hardware)
 10.0.0.14         orin-nx      (standalone, jetson_llm group, llama.cpp)
-10.0.0.20-24      Cluster 2 (code-complete, not yet live — see Hardware)
+10.0.0.21-26      Cluster 2, 6 nodes on DeskPi Super6C, no BMC (code-complete, not yet live — see Hardware)
 10.0.0.30-49      MetalLB LoadBalancer pool (Cluster 1)
 10.0.0.50         orin-nano    (standalone, jetson_llm group, llama.cpp)
 10.0.0.50-69      MetalLB LoadBalancer pool (Cluster 2, future) — ⚠️ CONFLICT: orin-nano's IP sits at the start of this range; re-check before Cluster 2's MetalLB pool is actually provisioned.

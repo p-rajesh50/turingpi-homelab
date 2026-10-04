@@ -1,0 +1,51 @@
+---
+# ansible/playbooks/23-cluster2-vault.yml
+# Stands up an INDEPENDENT Vault + External Secrets Operator on Cluster 2 — a separate
+# instance from Cluster 1's Vault, not a shared/fleet-wide one (decision made 2026-09-13,
+# see SESSION-HANDOFF.md). Prerequisite for Part 2 (AdGuard Home), which wires its admin
+# password through this Vault/ExternalSecret from the start.
+#
+# Requires: Longhorn already live on cm4-node-1 (control-plane) with a registered disk —
+# confirmed via 21-cluster2-longhorn.yml Phases 1/3/4.
+#
+# Power cycles: Cluster 2 has no BMC. Every power cycle leaves Vault SEALED. Afterwards run
+# `make vault-unseal-cluster2`, then `make vault-check-cluster2`. Until Vault is unsealed,
+# ExternalSecrets cannot refresh.
+#
+# Key custody: ~/.vault-init-cluster2.json on the workstation is the ONLY copy of the unseal
+# keys and root token. Keep an offline backup outside the repo and the cluster.
+
+- name: Deploy independent Vault on Cluster 2
+  hosts: cm4_control
+  become: false
+  tags: [vault]
+  environment:
+    KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+  vars:
+    admin_user: "{{ ansible_user }}"
+  roles:
+    - role: vault-cluster2
+
+- name: Deploy External Secrets Operator on Cluster 2
+  hosts: cm4_control
+  become: false
+  tags: [eso]
+  environment:
+    KUBECONFIG: "/home/{{ ansible_user }}/.kube/config"
+  vars:
+    admin_user: "{{ ansible_user }}"
+  roles:
+    - role: external-secrets-cluster2
+
+- name: Operator notes for Cluster 2 Vault
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Print operator notes
+      ansible.builtin.debug:
+        msg:
+          - "Power cycle: Vault comes back sealed. Run: make vault-unseal-cluster2"
+          - "Check:       make vault-check-cluster2"
+          - "Keys file:   ~/.vault-init-cluster2.json is the only copy. Back it up offline."
+          - "Keep it out of the repo and out of the cluster."

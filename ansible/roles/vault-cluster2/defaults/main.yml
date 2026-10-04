@@ -1,0 +1,21 @@
+---
+# ansible/roles/vault-cluster2/defaults/main.yml
+# Pinned to the running release. Live: helm release "vault" = vault-0.34.1, image
+# hashicorp/vault:2.0.4. Bumping either is a deliberate, reviewed change (a pod-template
+# change restarts the pod, which re-seals Vault).
+vault_chart_version: "0.34.1"
+vault_image_tag: "2.0.4"
+
+# no_log for the unseal and configure tasks. Leave true. Init and key-save are always
+# no_log: true regardless of this value.
+vault_secret_no_log: true
+
+# ESO gets READ-ONLY access to explicit per-service paths only. Add an entry here when a
+# service gets its own ExternalSecret; never widen this to secret/* (that stays homelab-admin,
+# which is for humans, not ESO). Policy paths are EXACT: each entry becomes
+# secret/data/<path> and secret/metadata/<path>, with no globs. Start with the AdGuard Home
+# path from Part 2. That path doesn't exist in Vault until Part 2 writes it, so ESO reads will
+# fail until then.
+cluster2_eso_policies:
+  - name: eso-adguard-home
+    path: adguard-home

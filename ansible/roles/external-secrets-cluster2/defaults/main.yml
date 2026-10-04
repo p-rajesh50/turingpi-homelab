@@ -1,0 +1,4 @@
+---
+# Pinned to the running release (live: external-secrets-2.10.0, app v2.10.0 on Cluster 2).
+# A chart bump is a deliberate, reviewed change.
+eso_chart_version: "2.10.0"

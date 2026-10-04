@@ -30,3 +30,7 @@ ml-env/
 
 # Kubeconfig (fetched automatically by playbook)
 *.kubeconfig
+
+# Vault init material (unseal keys + root token). Lives in $HOME, but never commit a copy.
+.vault-init*.json
+vault-init*.json

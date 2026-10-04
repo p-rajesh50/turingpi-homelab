@@ -370,6 +370,39 @@ vault-check:
 		(echo "ERROR: VAULT_TOKEN not set. Run: export VAULT_TOKEN=\$$(python3 -c \"import json; print(json.load(open('/home/p_raj/.vault-init.json'))['root_token'])\")" && exit 1)
 	@echo "Vault OK"
 
+# ── Cluster 2 Vault (independent instance; never uses the Cluster 1 kubeconfig or keys) ──
+# Every kubectl call sets KUBECONFIG inline. Each recipe line runs in its own shell, so an
+# `export` on one line does not reach the next.
+# Keys stay in argv only inside the Vault container: piped on stdin, read by sh, passed to
+# `vault operator unseal` there. They never appear on the workstation's command line.
+# Unseal threshold comes from the server's own status (.t), not a hardcoded value.
+.PHONY: vault-status-cluster2
+vault-status-cluster2:
+	@KUBECONFIG=$(HOME)/.kube/turingpi-cluster2.conf kubectl exec -n vault vault-0 -- vault status || true
+
+.PHONY: vault-unseal-cluster2
+vault-unseal-cluster2:
+	@test -f $(HOME)/.vault-init-cluster2.json || { echo "ERROR: $(HOME)/.vault-init-cluster2.json not found. Restore it from the offline backup first."; exit 1; }
+	@T=$$(KUBECONFIG=$(HOME)/.kube/turingpi-cluster2.conf kubectl exec -n vault vault-0 -- vault status -format=json 2>/dev/null \
+		| python3 -c "import json,sys; print(json.load(sys.stdin)['t'])") || { echo "ERROR: could not read Vault status"; exit 1; }; \
+	if [ -z "$$T" ]; then echo "ERROR: no threshold in Vault status (is Vault initialized?)"; exit 1; fi; \
+	for i in $$(seq 0 $$(( $$T - 1 ))); do \
+		python3 -c "import json,sys; sys.stdout.write(json.load(open('$(HOME)/.vault-init-cluster2.json'))['unseal_keys_b64'][$$i] + '\n')" \
+		| KUBECONFIG=$(HOME)/.kube/turingpi-cluster2.conf kubectl exec -i -n vault vault-0 -- sh -c 'vault operator unseal "$$(cat)" > /dev/null' || exit 1; \
+	done
+	@KUBECONFIG=$(HOME)/.kube/turingpi-cluster2.conf kubectl exec -n vault vault-0 -- vault status || true
+	@echo "✓ Cluster 2 Vault unseal attempted (see status above)"
+
+.PHONY: vault-check-cluster2
+vault-check-cluster2:
+	@KUBECONFIG=$(HOME)/.kube/turingpi-cluster2.conf kubectl exec -n vault vault-0 -- vault status -format=json 2>/dev/null \
+		| python3 -c "import json,sys; sys.exit(0 if not json.load(sys.stdin)['sealed'] else 1)" \
+		|| { echo "ERROR: Cluster 2 Vault is sealed or unreachable. Run: make vault-unseal-cluster2"; exit 1; }
+	@echo "Cluster 2 Vault: unsealed"
+	@KUBECONFIG=$(HOME)/.kube/turingpi-cluster2.conf kubectl get clustersecretstore vault-backend -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null \
+		| grep -q True && echo "ClusterSecretStore vault-backend: Ready" \
+		|| echo "WARN: ClusterSecretStore vault-backend not Ready — ExternalSecrets will not refresh"
+
 ## truenas: Configure TrueNAS datasets and NFS exports
 .PHONY: truenas
 truenas: vault-check

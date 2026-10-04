@@ -2017,7 +2017,7 @@ Backup target for Longhorn — ✅ configured (NFSv3 forced, see July 26, 2026
 - Migrated all Cluster 2 modules from TuringPi 2 to DeskPi Super6C, expanding from 4 to 6 nodes
 - Final topology:
   - cm4-node-1: CM4, eMMC, 10.0.0.21, control-plane
-  - cm4-node-2: CM5 Lite (no eMMC), 10.0.0.22, migrated from microSD to NVMe boot (dd clone + resize2fs, NVMe-first EEPROM boot order was already default)
+  - cm4-node-2: CM5 Lite (no eMMC), 10.0.0.22, migrated from microSD to NVMe boot (dd clone + resize2fs, NVMe-first EEPROM boot order was already default) — **CORRECTED 2026-10-03:** this was not the steady state. The NVMe OS partition consumed the whole drive, leaving no Longhorn room; node-2 ran from microSD until the Part 1d repartition described in the 2026-10-03 entry below.
   - cm4-node-3: CM4, eMMC, 10.0.0.23 — original module recovered from apparent hardware fault (was actually an nRPIBOOT jumper placement issue, not dead hardware), then fresh-flashed (Raspberry Pi OS Trixie 2026-06-18, cloud-init)
   - cm4-node-4: CM4, eMMC, 10.0.0.24
   - cm4-node-5: new CM4 (32GB eMMC), 10.0.0.25, 1TB NVMe for Longhorn
@@ -2026,6 +2026,56 @@ Backup target for Longhorn — ✅ configured (NFSv3 forced, see July 26, 2026
 - Power: switched to Thermaltake Smart 500W ATX PSU (4-pin EPS connector) to support CM5 + NVMe load. Super6C has no BMC — power-cycling is a hard cut via the PSU switch, affecting all 6 nodes simultaneously. Always `sync` after config changes before power-cycling.
 - All 6 nodes: static IPs via `netplan-eth0` (NetworkManager renderer), cloud-init network management permanently disabled (`/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg`) to prevent future DHCP reversion on re-flash.
 - Remaining: mount+register NVMe as Longhorn disk on nodes 1/3/4/5/6, full Ansible provisioning on nodes 3/5/6 (K3s join, ufw, iscsi, netplan), inventory update, then observability stack migration from Cluster 1.
+- **CORRECTED 2026-10-03:** the "nodes 3/5/6 not yet joined" item above is stale. Nodes 3, 5 and 6 were already joined and `Ready` (joined in an earlier session, with the stale cm4-node-3 Node object removed then). Their Longhorn disks were registered in that session, and node-2 was the only one left out. The netplan drift on nodes 3–6 is covered in the 2026-10-03 entry. Observability migration is still open.
+
+---
+
+## 2026-10-03 — Part 1d (cm4-node-2 NVMe repartition), Longhorn registration, DNS/IP drift fix (Cluster 2)
+
+### Part 1d: node-2 NVMe repartition (complete, verified)
+- **Why:** node-2 is a CM5 Lite with no eMMC. Its 477 GB NVMe held only the OS, so there was no room for a Longhorn partition. The Super6C firmware always boots an NVMe when one is present, so node-2 was relocated to slot 1 (USB-A) and booted from its microSD. The NVMe was attached via a USB enclosure as `/dev/sda`.
+- **Backup:** full `dd` image of the pre-shrink NVMe at `10.0.0.12:/mnt/sata/k8s/manual-backups/cm4-node-2-nvme-pre-shrink-2026-09-13.img` (512,110,190,592 bytes). Digest `7d61252b…1550` matches. The `.sha256` file recorded a path that doesn't exist on rk1-worker-1, so its path was corrected to `/mnt/sata/k8s/manual-backups/…`. The original file is at `/home/ubuntu/sha256.orig.bak` on rk1-worker-1.
+- **Partition layout** (GPT, 1 MiB aligned): `sda1` 512 MiB vfat `nvme-boot`; `sda2` 125 GiB ext4 `nvme-root`; `sda3` 351.4 GiB ext4 `longhorn-nvme`. Labels are unique because the microSD uses Pi OS's `bootfs`/`rootfs`.
+- **Restore source problem:** the backup's root filesystem had a dirty ext4 journal, so a read-only mount refused it. The rk1-worker-1 `e2fsprogs` (1.46.5) also can't read the image's features (`C12`, `R16`). Fix: a sparse working copy at `/mnt/sata/k8s/restore-work/work.img` (512 GB apparent, ~9 GB actual) was replayed with node-2's `e2fsprogs` 1.47.2. The original backup was never modified.
+- **Correction history:** the first `e2fsck -fy` on the working copy was logged through a `tail` and then through a `tee` that hit a permissions error, so the log is incomplete. Its partial output showed a corrupted directory (`/home/raj/.config/procps`), six unconnected containerd task directories, and reference-count fixes. The working copy was then recreated from the original and checked with `e2fsck -fn`, which completed all five passes cleanly (exit 0). Log: `/home/raj/restore-logs/e2fsck-fn-after-fy.log` on node-2.
+- **Restore:** root copied with `rsync -aHAX`, excluding `/proc /sys /dev /run /tmp /mnt /media /lost+found /boot/firmware` and `/var/lib/rancher/k3s/agent/containerd` (ephemeral runtime state, regenerated on containerd start). Boot partition copied separately. Verified: 80,053 files on both sides, 50 boot entries on both sides, no diffs in `/etc` or `/usr/bin`. Restored root is 4.4 GB used; the backup's 8.2 GB included 3.9 GB of containerd.
+- **Identifiers:** `fstab` uses the new PARTUUIDs (`/boot/firmware` = `2c3c6ac5-…`, `/` = `fa0e2b24-…`) plus `LABEL=longhorn-nvme /var/lib/longhorn ext4 defaults,nofail 0 2`. `cmdline.txt` has `root=PARTUUID=fa0e2b24-…`. `/etc/machine-id` removed so systemd regenerates it. The microSD keeps its own `3bd6264b-*` identifiers, so the two cards no longer collide.
+- **Boot order:** `BOOT_ORDER=0xf416` (NVMe first, SD fallback), applied via dump → edit → `rpi-eeprom-config --apply`. Confirmed active after the module moved back to slot 2 and booted from `nvme0n1p2`.
+- **Cordon/drain was not run.** The Cluster 2 control plane was unreachable at that step, so there were no workloads to drain. When checked, all six nodes were unreachable except node-2; the cause of the outage was not confirmed in-session.
+- **Tooling deviation:** `nfs-common` was installed on node-2 with `apt` so it could mount the working copy over NFS. It's not in node-2's Cluster 2 provisioning path yet. See open follow-ups.
+
+### Longhorn registration (node-2)
+- `nvme-disk` registered on `cm4-node-2` at `/var/lib/longhorn` (`diskType: filesystem`, `allowScheduling: true`, `storageReserved: 0`). Capacity ~370 GB, Ready and Schedulable.
+- `21-cluster2-longhorn.yml` gained a `Register nvme-disk on cm4-node-2` task that reads the current path and patches only when it's missing or different, so re-runs are no-ops. Syntax-checked only; the full playbook has not been run.
+- All six Longhorn nodes now show `READY`/`SCHEDULABLE`. `cm4-node-6`'s `longhorn-manager` restarted six times during its network change, and it stabilized afterwards.
+
+### DNS and IP drift (nodes 3, 4, 5, 6)
+- **Symptom:** after the board's power cycles, nodes 3, 4, 5 and 6 came up on DHCP addresses (`10.0.0.160`, `.168`, `.153`, `.144`) instead of their static IPs (`10.0.0.23`–`.26`).
+- **Root cause (strong evidence, not proven):** the NetworkManager-managed static config `/etc/netplan/90-NM-75a1216a-9d1a-30cd-8aca-ace5526ec021.yaml` was **0 bytes** on each of those nodes, with mtimes at 14:40 (node-3 14:40, node-4 14:40:48, node-5 14:40:48, node-6 14:40:49). Matching times across four nodes point to one event, most likely a hard PSU cut that lost unflushed writes. NetworkManager then fell back to its auto-generated `Wired connection 1` (DHCP, priority -999), which outranks the static `netplan-eth0` profile (priority 0).
+- **Ruled out:** the cloud-init lockout file `/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg` was present on every node (dated Sep 13), so cloud-init did not undo the config.
+- **Not the same event:** on node-3, a hand-written `/etc/netplan/netplan-eth0.yaml` I created at 23:07:58 disappeared before 23:20:36. The journal logs no removal. It is most likely NetworkManager's netplan integration reconciling two files that define the same connection UUID (`75a1216a…`). That's inference, not confirmed.
+- **Fix applied:** the static config was rewritten in the `90-NM` file with `10.0.0.2x/24`, gateway `10.0.0.1`, and nameservers `75.75.75.75` and `75.75.76.76`. `Wired connection 1` was deleted, and `netplan-eth0` brought up. Node-2 and node-3 had their DNS changed through `nmcli`, which rewrote the `90-NM` files. Nodes 4, 5 and 6 had their `90-NM` files written directly, with the static config and the new DNS, followed by `netplan generate`, `nmcli connection reload`, and activation of `netplan-eth0`. The DNS was verified on disk on every node, but not across a reboot.
+- **Nameservers:** `8.8.8.8` was removed from every node. The repo's `cluster_dns` is still `10.0.0.1`, which is an open decision.
+- **Verified:** all six nodes at `10.0.0.21`–`.26`, hostnames match, `Ready` in Kubernetes, Longhorn schedulable.
+
+### cm4-node-1 `/etc/hosts`
+- The `127.0.1.1` line listed `cm4-node-1 cm4-node-2`. Cloud-init renders that line from `{{fqdn}}`, and the fqdn came from the cached first-boot user-data (`/var/lib/cloud/instances/rpi-imager-…`, `hostname: cm4-node-2`), left over from when node-1's card was flashed.
+- **Fix:** the line now reads `127.0.1.1 cm4-node-1`, a `10.0.0.22 cm4-node-2` entry was added, and `/etc/cloud/cloud.cfg.d/99-manage-etc-hosts.cfg` sets `manage_etc_hosts: false`. A user-data drop-in setting the hostname would have lost to the cached user-data, so this is the targeted fix. The schema validates, and the cloud-init source confirms the module honours the flag. Not tested by reboot.
+
+### Open follow-ups (not resolved tonight)
+**Highest priority: item 11 (persistent journald), ahead of all others.** Tonight's root-cause work was limited by volatile logs twice (the 14:40 event and the node-3 file disappearance). Fixing that first makes the next investigation solvable instead of inferred.
+
+1. **Ansible sync convention:** run `sync` after every netplan or NetworkManager write. Not yet added to any role or playbook.
+2. **`cluster_dns` default:** the repo uses `10.0.0.1`; the live nodes use `75.75.75.75`/`75.75.76.76`. Decide which is the source of truth.
+3. **`nfs-common` in Cluster 2 provisioning:** it's in the shared Cluster 1 `common_packages` list, but Cluster 2 doesn't run that role. Add it to Cluster 2's own common setup.
+4. **Loop-backed `/var/swap` on node-2:** `loop0` is attached to `/var/swap` (2 GiB file, dated Sep 13). No swap is active (`SwapTotal 0`), and nothing in fstab refers to it. Find what attaches it.
+5. **`systemd-zram-setup@zram0.service` on node-2** reports `failed`. Earlier notes say zram was masked fleet-wide. Confirm whether this is the expected masked state.
+6. **`netplan-eth0.yaml` disappearance on node-3:** see the DNS/IP section above. Confirm whether NetworkManager's netplan integration is the cause, and avoid hand-writing files in `/etc/netplan` on NM-managed nodes.
+7. **Journald is volatile:** `/var/log/journal` exists but holds no files, so logs from earlier boots are lost. Tracked as item 11, the highest priority.
+8. **No hardware RTC on CM4/CM5:** timestamps written before a power cut can be wrong until NTP syncs. Keep this in mind when correlating events.
+9. **Cleanup:** `/mnt/sata/k8s/restore-work/work.img` on rk1-worker-1 (512 GB apparent, ~9 GB actual) can be removed once the restore is signed off. Node-2 has `/home/raj/restore-logs/` and `/home/raj/netplan-*.bak` files to tidy.
+10. **CLAUDE.md:** its "Cluster 2 today" text still says nodes 3/5/6 aren't joined, and its node-2 description predates this work. Update it in the same pass.
+11. **Persistent journald (highest priority):** make journald write to disk on every node, so logs survive hard power cuts. Set `Storage=persistent` in `journald.conf` (or a drop-in), create `/var/log/journal` with the correct ownership, restart `systemd-journald`, and confirm that `journalctl --list-boots` shows more than one boot after a reboot. Roll it out through the common role on all six Cluster 2 nodes. Also consider `SyncIntervalSec` so logs reach disk before a power cut. Do this before the next investigation.
 
 ---
 

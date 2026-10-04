@@ -2076,6 +2076,46 @@ Backup target for Longhorn — ✅ configured (NFSv3 forced, see July 26, 2026
 9. **Cleanup:** `/mnt/sata/k8s/restore-work/work.img` on rk1-worker-1 (512 GB apparent, ~9 GB actual) can be removed once the restore is signed off. Node-2 has `/home/raj/restore-logs/` and `/home/raj/netplan-*.bak` files to tidy.
 10. **CLAUDE.md:** its "Cluster 2 today" text still says nodes 3/5/6 aren't joined, and its node-2 description predates this work. Update it in the same pass.
 11. **Persistent journald (highest priority):** make journald write to disk on every node, so logs survive hard power cuts. Set `Storage=persistent` in `journald.conf` (or a drop-in), create `/var/log/journal` with the correct ownership, restart `systemd-journald`, and confirm that `journalctl --list-boots` shows more than one boot after a reboot. Roll it out through the common role on all six Cluster 2 nodes. Also consider `SyncIntervalSec` so logs reach disk before a power cut. Do this before the next investigation.
+12. **Cluster 1 Vault and ESO roles have the same flaws fixed on the Cluster 2 draft.** `ansible/roles/vault/tasks/main.yml` lacks `no_log` on the init, unseal, and policy tasks, so unseal keys and the root token can appear in `-v` output and argv. Its `vault status` exit-code check mistakes a sealed Vault for an uninitialized one. `ansible/roles/external-secrets/tasks/main.yml` binds ESO to the `homelab-admin` policy, which grants full `secret/*`. Fix this as its own reviewed change. Do not fold it into the Cluster 2 work.
+13. **Cluster 2 Vault operations (Vault is LIVE, not to be deployed; hardening is uncommitted).** Cluster 2 Vault has been running since 2026-09-13: Helm release `vault` (vault-0.34.1, app 2.0.4), initialized, currently sealed, threshold 3 of 5. The draft `vault-cluster2` role re-enters the "initialized + sealed" branch against it. Every power cycle leaves it sealed, and ExternalSecrets cannot refresh until it's unsealed. After any power cycle, run `make vault-unseal-cluster2`, then `make vault-check-cluster2`. The only copy of the unseal keys and root token is `~/.vault-init-cluster2.json` on the workstation. Keep an offline backup outside the repo and the cluster. Losing it means losing the Cluster 2 Vault's data, because the sealed Vault can't be opened without the keys.
+
+---
+
+## 2026-10-04 — Cluster 2 overlay repair: stale flannel state after DHCP drift; Vault ESO store recovered
+
+### Root cause (consequence of the DHCP drift)
+- **Stale flannel annotations.** Flannel publishes each node's `flannel.alpha.coreos.com/public-ip` from the address the node had when it first registered. After the drift, nodes 3–6 kept their DHCP addresses (`.160`, `.168`, `.153`, `.144`). Flannel does not refresh the annotation when the node's address changes.
+- **Stale VXLAN device.** The `flannel.1` device's `local` address was also fixed at startup. Node-4 still had `local 10.0.0.168` after its static IP was restored. Its encapsulated replies were sent from an address it no longer owned, so they never reached the other nodes. Node-1's FDB pointed node-4 at the old address too.
+- **Symptom:** pods could not reach pods on the drifted nodes. CoreDNS runs on cm4-node-4, so cluster DNS failed for pods on the other nodes. The Vault ClusterSecretStore timed out logging in and stayed `InvalidProviderConfig`.
+- **Why it wasn't obvious:** Longhorn reported all nodes `READY`, and node-level checks passed. Neither exercises the pod overlay.
+
+### Fix (applied 2026-10-04, verified per node)
+1. Set the correct address in the annotation: `kubectl annotate node cm4-node-N flannel.alpha.coreos.com/public-ip=<own IP> --overwrite`.
+2. Restart `k3s-agent` on that node: `sudo systemctl restart k3s-agent`. This rebuilds `flannel.1` with the current `local` address.
+3. Verify: `ip -d link show flannel.1` shows `local <own IP>`; the annotation matches; peers' FDB entries (`bridge fdb show dev flannel.1`) show the new `dst`; a fresh pod on that node resolves `vault.vault.svc.cluster.local`.
+- **Order:** node-4 (CoreDNS), then nodes 3, 5, 6. All four are now verified. All six annotations match their node IPs. The ClusterSecretStore `vault-backend` is `Valid`/`READY: True`.
+- **Method note:** on node-4, the annotation change alone was not enough, because the VXLAN device kept the old `local`. The restart was required. On nodes 3, 5 and 6, a restart alone was enough: it refreshed both the annotation and the `local` address, so no separate annotate step was needed. The annotate step is only needed if a restart is ever ruled out.
+- **Open question:** the k3s source and docs were not checked. This k3s build's agent exposes no flag to pin the public IP. A durable fix, such as a `--flannel-external-ip`-style setting or an address-stable node IP, is still to be confirmed against the upstream docs.
+
+### Post-power-cycle checklist (Cluster 2)
+After any whole-board power cycle, run these checks in order:
+1. **Static IPs:** every node answers at `10.0.0.21`–`.26` (`ping`), and `ip -br addr` shows the static address, not a DHCP one.
+2. **Flannel:** each node's `flannel.alpha.coreos.com/public-ip` annotation equals its InternalIP (`kubectl get nodes -o custom-columns=...`). Each `flannel.1` `local` equals its IP. If either is stale, use the fix above.
+3. **Overlay and DNS:** a fresh pod on node-1 and one on node-6 each resolve `vault.vault.svc.cluster.local` in under a second.
+4. **Vault seal:** `make vault-status-cluster2`. Vault comes back sealed, so run `make vault-unseal-cluster2` if so.
+5. **ESO store:** `kubectl get clustersecretstores` shows `vault-backend` `Valid`/`READY: True`. ESO needs about 90 s to recover after an unseal, so wait before judging.
+6. **Longhorn:** `kubectl -n longhorn-system get volumes.longhorn.io` shows `healthy`, and every replica is `running`.
+
+### CoreDNS is a single replica on cm4-node-4
+- `kube-system` runs one CoreDNS pod, on cm4-node-4, and it has restarted 23 times. When the overlay to node-4 broke, cluster DNS failed for every pod. This is a single point of failure, and it's worse now because it depends on node-4's overlay path.
+- **Follow-up (HIGH PRIORITY):** scale CoreDNS to two replicas on different nodes. The single replica on cm4-node-4 was a single point of failure: its overlay failure took down cluster DNS. Check whether the K3s-managed CoreDNS deployment can be scaled or customised without being reverted, and propose the approach. Don't apply it without review.
+- **Follow-up (flannel docs):** confirm against the upstream k3s and flannel docs how the flannel `public-ip` annotation and the VXLAN `local` address are chosen on v1.30.5+k3s1, so a future address drift can be prevented and not only repaired.
+
+### K3S_TOKEN exposure (follow-up, not rotated mid-repair)
+- The k3s join token (`K3S_TOKEN`) was printed in command output on 2026-10-04 while reading the `k3s-agent` systemd unit. Anyone with that transcript has it.
+- **Why not rotated yet:** rotating it means re-joining every agent, and the repair was in progress.
+- **External reachability of 10.0.0.21:6443 checked 2026-10-04** (router forwarding/UPnP, Cloudflare Tunnel, Tailscale routes, outside test): none. Rotation is low priority, scheduled for a planned window. Re-run these checks if a port forward, tunnel route or subnet route is ever added.
+- **Action:** rotate the token during a planned window, then re-join the agents. Until then, treat the token as exposed. From now on, redact `K3S_TOKEN` in any command that prints unit files or environment, for example `| sed -E 's/K3S_TOKEN=[^ ]*/K3S_TOKEN=<redacted>/g'`.
 
 ---
 
